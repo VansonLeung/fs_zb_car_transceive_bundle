@@ -1,0 +1,63 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="RCCarController.MainWindow"
+        Title="RC Car Controller"
+        Width="600" Height="500"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Steering Controls -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="Steering (0-180)" FontWeight="Bold" Margin="0,0,0,5"/>
+            <StackPanel Orientation="Horizontal">
+                <Slider x:Name="SteeringSlider" Minimum="0" Maximum="180" Value="90" Width="150" Margin="0,0,10,0"/>
+                <NumericUpDown x:Name="SteeringNumeric" Minimum="0" Maximum="180" Value="90" Width="60"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Throttle Controls -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,10">
+            <TextBlock Text="Throttle (40-140)" FontWeight="Bold" Margin="0,0,0,5"/>
+            <StackPanel Orientation="Horizontal">
+                <Slider x:Name="ThrottleSlider" Minimum="40" Maximum="140" Value="90" Width="150" Margin="0,0,10,0"/>
+                <NumericUpDown x:Name="ThrottleNumeric" Minimum="40" Maximum="140" Value="90" Width="60"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Serial Port Controls -->
+        <StackPanel Grid.Row="2" Margin="0,0,0,10">
+            <TextBlock Text="Serial Connection" FontWeight="Bold" Margin="0,0,0,5"/>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Port:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                <ComboBox x:Name="PortComboBox" Width="100" Margin="0,0,10,0"/>
+                <TextBlock Text="Baud:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                <ComboBox x:Name="BaudComboBox" Width="80" Margin="0,0,10,0">
+                    <ComboBoxItem>9600</ComboBoxItem>
+                    <ComboBoxItem>19200</ComboBoxItem>
+                    <ComboBoxItem>38400</ComboBoxItem>
+                    <ComboBoxItem>57600</ComboBoxItem>
+                    <ComboBoxItem IsSelected="True">115200</ComboBoxItem>
+                </ComboBox>
+                <Button x:Name="RefreshButton" Content="Refresh" Margin="0,0,10,0"/>
+                <Button x:Name="ConnectButton" Content="Connect" Margin="0,0,10,0"/>
+                <TextBlock x:Name="StatusLabel" Text="Disconnected" Foreground="Red" VerticalAlignment="Center"/>
+            </StackPanel>
+            <TextBlock x:Name="LatestMessageLabel" Text="Latest: (not connected)" FontWeight="Bold" Margin="0,5,0,0" FontFamily="Consolas" FontSize="12"/>
+            <TextBlock x:Name="LatestAckLabel" Text="Ack: (waiting)" FontWeight="Bold" Margin="0,2,0,0" FontFamily="Consolas" FontSize="12" Foreground="Green"/>
+        </StackPanel>
+
+        <!-- Debug Log -->
+        <StackPanel Grid.Row="3">
+            <TextBlock Text="Debug Log" FontWeight="Bold" Margin="0,0,0,5"/>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Height="200">
+                <TextBox x:Name="LogTextBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="10"/>
+            </ScrollViewer>
+        </StackPanel>
+    </Grid>
+</Window>
