@@ -22,6 +22,9 @@ bool commandComplete = false;
 int steeringValue = 90;  // Center position (0-180)
 int throttleValue = 90;  // Neutral position (1-180, mapped to 0-180 for servo lib)
 
+int targetSteeringValue = 90;
+int targetThrottleValue = 90;
+
 void setup() {
   // Initialize serial communication
   Serial.begin(BAUD_RATE);
@@ -90,19 +93,31 @@ void processCommand(char* command) {
     throttleStr[3] = '\0';
 
     // Convert to integers
-    int newSteering = atoi(steeringStr);
-    int newThrottle = atoi(throttleStr);
+    targetSteeringValue = atoi(steeringStr);
+    targetThrottleValue = atoi(throttleStr);
 
     // Validate ranges
-    if (newSteering >= 0 && newSteering <= 180) {
-      steeringValue = newSteering;
+    if (targetSteeringValue >= 0 && targetSteeringValue <= 180) {
+      // Limit max change to 20
+      int diff = targetSteeringValue - steeringValue;
+      if (abs(diff) > 20) {
+        steeringValue += (diff > 0) ? 20 : -20;
+      } else {
+        steeringValue = targetSteeringValue;
+      }
       steeringServo.write(steeringValue);
       // Serial.print("Steering set to: ");
       // Serial.println(steeringValue);
     }
 
-    if (newThrottle >= 40 && newThrottle <= 140) {
-      throttleValue = newThrottle;
+    if (targetThrottleValue >= 40 && targetThrottleValue <= 140) {
+      // Limit max change to 3
+      int diff = targetThrottleValue - throttleValue;
+      if (abs(diff) > 3) {
+        throttleValue += (diff > 0) ? 3 : -3;
+      } else {
+        throttleValue = targetThrottleValue;
+      }
       escMotor.write(throttleValue);
       // Serial.print("Throttle set to: ");
       // Serial.println(throttleValue);
