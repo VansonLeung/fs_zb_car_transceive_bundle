@@ -9,6 +9,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
@@ -30,8 +31,19 @@
             </StackPanel>
         </StackPanel>
 
-        <!-- Serial Port Controls -->
+        <!-- Driving Mode and Steering Offset -->
         <StackPanel Grid.Row="2" Margin="0,0,0,10">
+            <TextBlock Text="Driving Mode and Steering Offset" FontWeight="Bold" Margin="0,0,0,5"/>
+            <StackPanel Orientation="Horizontal">
+                <CheckBox x:Name="DrivingModeToggle" Content="Driving Mode" Margin="0,0,20,0"/>
+                <TextBlock Text="Steering Offset:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                <NumericUpDown x:Name="SteeringOffsetNumeric" Minimum="-50" Maximum="50" Value="0" Width="60"/>
+                <TextBlock x:Name="SteeringOffsetLabel" Text="(0)" VerticalAlignment="Center" Margin="5,0,0,0" FontWeight="Bold"/>
+            </StackPanel>
+        </StackPanel>
+
+                <!-- Serial Port Controls -->
+        <StackPanel Grid.Row="3" Margin="0,0,0,10">
             <TextBlock Text="Serial Connection" FontWeight="Bold" Margin="0,0,0,5"/>
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="Port:" VerticalAlignment="Center" Margin="0,0,5,0"/>
@@ -53,7 +65,7 @@
         </StackPanel>
 
         <!-- Debug Log -->
-        <StackPanel Grid.Row="3">
+        <StackPanel Grid.Row="4">
             <TextBlock Text="Debug Log" FontWeight="Bold" Margin="0,0,0,5"/>
             <ScrollViewer VerticalScrollBarVisibility="Auto" Height="200">
                 <TextBox x:Name="LogTextBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="10"/>

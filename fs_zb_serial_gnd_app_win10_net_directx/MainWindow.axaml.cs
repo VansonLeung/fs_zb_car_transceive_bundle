@@ -15,34 +15,30 @@ namespace RCCarController
 {
     public partial class MainWindow : Window
     {
-        // DirectX Input (Windows only)
-        private DirectInput? directInput;
-        private Joystick? joystick;
-        private IList<DeviceInstance>? gameControllers;
-
-        // Serial Communication
-        private SerialPort? serialPort;
-        private bool isConnected = false;
+        // Managers
+        private SerialManager serialManager;
+        private GameControllerManager gameControllerManager;
+        private SettingsManager settingsManager;
 
         // Control Values
         private int steeringValue = 90;  // 0-180
         private int throttleValue = 90;  // 1-180 (neutral)
+        private bool isDrivingMode = false;
+        private int steeringOffset = 0;
 
         // Transmit Timer
         private System.Timers.Timer? transmitTimer;
 
-        // Settings
-        private const string SETTINGS_FILE = "settings.ini";
-        private string? savedPort;
-
         public MainWindow()
         {
             InitializeComponent();
+            serialManager = new SerialManager();
+            gameControllerManager = new GameControllerManager();
+            settingsManager = new SettingsManager();
             if (OperatingSystem.IsWindows())
             {
-                InitializeDirectInput();
+                gameControllerManager.Initialize();
             }
-            LoadSettings();
             SetupTransmitTimer();
             // RefreshPorts(); // Moved to OnLoaded
         }
@@ -64,6 +60,9 @@ namespace RCCarController
             var throttleNumeric = this.FindControl<NumericUpDown>("ThrottleNumeric");
             var refreshButton = this.FindControl<Button>("RefreshButton");
             var connectButton = this.FindControl<Button>("ConnectButton");
+            var baudComboBox = this.FindControl<ComboBox>("BaudComboBox");
+            var drivingModeToggle = this.FindControl<CheckBox>("DrivingModeToggle");
+            var steeringOffsetNumeric = this.FindControl<NumericUpDown>("SteeringOffsetNumeric");
 
             // Wire up events
             if (steeringSlider != null) steeringSlider.ValueChanged += SteeringSlider_ValueChanged;
@@ -72,12 +71,24 @@ namespace RCCarController
             if (throttleNumeric != null) throttleNumeric.ValueChanged += ThrottleNumeric_ValueChanged;
             if (refreshButton != null) refreshButton.Click += RefreshButton_Click;
             if (connectButton != null) connectButton.Click += ConnectButton_Click;
+            if (drivingModeToggle != null) drivingModeToggle.IsCheckedChanged += DrivingModeToggle_IsCheckedChanged;
+            if (steeringOffsetNumeric != null) steeringOffsetNumeric.ValueChanged += SteeringOffsetNumeric_ValueChanged;
 
             // Key handling
             this.KeyDown += OnKeyDown;
+            this.KeyUp += OnKeyUp;
+
+            // Subscribe to manager events
+            serialManager.DataReceived += SerialManager_DataReceived;
+            serialManager.TransmissionError += SerialManager_TransmissionError;
+            gameControllerManager.ControlValuesChanged += GameControllerManager_ControlValuesChanged;
+
+            // Load settings
+            if (baudComboBox != null) settingsManager.LoadSettings(baudComboBox);
 
             // Now safe to refresh ports
             RefreshPorts();
+            UpdateSteeringOffsetLabel();
         }
 
         private void OnKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
@@ -86,53 +97,87 @@ namespace RCCarController
             {
                 case Avalonia.Input.Key.A:
                 case Avalonia.Input.Key.Left:
-                    steeringValue = Math.Max(0, steeringValue - 5);
+                    if (isDrivingMode)
+                    {
+                        steeringValue = 120;
+                    }
+                    else
+                    {
+                        steeringValue = Math.Max(0, steeringValue - 5);
+                    }
                     UpdateSteeringUI();
                     break;
                 case Avalonia.Input.Key.D:
                 case Avalonia.Input.Key.Right:
-                    steeringValue = Math.Min(180, steeringValue + 5);
+                    if (isDrivingMode)
+                    {
+                        steeringValue = 60;
+                    }
+                    else
+                    {
+                        steeringValue = Math.Min(180, steeringValue + 5);
+                    }
                     UpdateSteeringUI();
                     break;
                 case Avalonia.Input.Key.W:
                 case Avalonia.Input.Key.Up:
-                    throttleValue = Math.Min(140, throttleValue + 1);
+                    if (isDrivingMode)
+                    {
+                        throttleValue = 108;
+                    }
+                    else
+                    {
+                        throttleValue = Math.Min(140, throttleValue + 1);
+                    }
                     UpdateThrottleUI();
                     break;
                 case Avalonia.Input.Key.S:
                 case Avalonia.Input.Key.Down:
-                    throttleValue = Math.Max(40, throttleValue - 1);
+                    if (isDrivingMode)
+                    {
+                        throttleValue = 75;
+                    }
+                    else
+                    {
+                        throttleValue = Math.Max(40, throttleValue - 1);
+                    }
                     UpdateThrottleUI();
                     break;
             }
         }
 
-        private void InitializeDirectInput()
+        private void OnKeyUp(object? sender, Avalonia.Input.KeyEventArgs e)
         {
-            try
+            if (isDrivingMode)
             {
-                directInput = new DirectInput();
-                gameControllers = directInput.GetDevices(DeviceType.Gamepad, DeviceEnumerationFlags.AllDevices);
-                if (gameControllers.Count == 0)
+                switch (e.Key)
                 {
-                    gameControllers = directInput.GetDevices(DeviceType.Joystick, DeviceEnumerationFlags.AllDevices);
-                }
-
-                if (gameControllers.Count > 0)
-                {
-                    joystick = new Joystick(directInput, gameControllers[0].InstanceGuid);
-                    joystick.Properties.BufferSize = 128;
-                    joystick.Acquire();
-                    LogMessage("Game controller detected: " + gameControllers[0].ProductName);
-                }
-                else
-                {
-                    LogMessage("No game controllers detected");
+                    case Avalonia.Input.Key.A:
+                    case Avalonia.Input.Key.Left:
+                    case Avalonia.Input.Key.D:
+                    case Avalonia.Input.Key.Right:
+                        steeringValue = 90;
+                        UpdateSteeringUI();
+                        break;
+                    case Avalonia.Input.Key.W:
+                    case Avalonia.Input.Key.Up:
+                    case Avalonia.Input.Key.S:
+                    case Avalonia.Input.Key.Down:
+                        throttleValue = 90;
+                        UpdateThrottleUI();
+                        break;
                 }
             }
-            catch (Exception ex)
+        }
+
+        private void SteeringSlider_ValueChanged(object? sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+        {
+            var steeringNumeric = this.FindControl<NumericUpDown>("SteeringNumeric");
+            if (steeringNumeric != null)
             {
-                LogMessage("DirectX initialization error: " + ex.Message);
+                steeringValue = (int)((Slider)sender!).Value;
+                steeringValue = Math.Clamp(steeringValue, 0, 180);
+                steeringNumeric.Value = steeringValue;
             }
         }
 
@@ -145,68 +190,18 @@ namespace RCCarController
 
         private void TransmitTimer_Tick(object? sender, ElapsedEventArgs e)
         {
-            if (isConnected && serialPort != null)
+            if (serialManager.IsConnected)
             {
-                try
+                // Poll game controller on Windows
+                if (OperatingSystem.IsWindows())
                 {
-                    // Poll game controller on Windows
-                    if (OperatingSystem.IsWindows())
-                    {
-                        PollGameController();
-                    }
-
-                    // Send command: SxxxTyyy
-                    string command = $"S{steeringValue:D3}T{throttleValue:D3}\n";
-                    serialPort.Write(command);
-                    UpdateLatestMessageLabel($"S{steeringValue:D3}T{throttleValue:D3}");
-                    // LogMessage($"Sent: {command.Trim()}");
+                    gameControllerManager.Poll();
                 }
-                catch (Exception ex)
-                {
-                    LogMessage("Transmission error: " + ex.Message);
-                    Disconnect();
-                }
-            }
-        }
 
-        private void PollGameController()
-        {
-            if (joystick == null) return;
-
-            try
-            {
-                joystick.Poll();
-                var state = joystick.GetCurrentState();
-
-                // Steering from X-axis (left stick X or wheel)
-                int steeringAxis = state.X;
-                steeringValue = (int)MapRange(steeringAxis, 0, 65535, 0, 180);
-                UpdateSteeringUI();
-
-                // Throttle from Y-axis (right trigger or Y-axis)
-                int throttleAxis = state.Y;
-                throttleValue = (int)MapRange(throttleAxis, 0, 65535, 40, 140);
-                UpdateThrottleUI();
-
-            }
-            catch (Exception ex)
-            {
-                LogMessage("Controller poll error: " + ex.Message);
-            }
-        }
-
-        private double MapRange(double value, double fromMin, double fromMax, double toMin, double toMax)
-        {
-            return (value - fromMin) * (toMax - toMin) / (fromMax - fromMin) + toMin;
-        }
-
-        private void SteeringSlider_ValueChanged(object? sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e)
-        {
-            var steeringNumeric = this.FindControl<NumericUpDown>("SteeringNumeric");
-            if (steeringNumeric != null)
-            {
-                steeringValue = (int)((Slider)sender!).Value;
-                steeringNumeric.Value = steeringValue;
+                // Send command
+                int effectiveSteering = Math.Clamp(steeringValue + steeringOffset, 0, 180);
+                serialManager.SendCommand(effectiveSteering, throttleValue);
+                UpdateLatestMessageLabel(serialManager.LatestMessage);
             }
         }
 
@@ -216,6 +211,7 @@ namespace RCCarController
             if (steeringSlider != null)
             {
                 steeringValue = (int)((NumericUpDown)sender!).Value;
+                steeringValue = Math.Clamp(steeringValue, 0, 180);
                 steeringSlider.Value = steeringValue;
             }
         }
@@ -238,6 +234,36 @@ namespace RCCarController
                 throttleValue = (int)e.NewValue;
                 throttleSlider.Value = throttleValue;
             }
+        }
+
+        private void DrivingModeToggle_IsCheckedChanged(object? sender, RoutedEventArgs e)
+        {
+            if (sender is CheckBox checkBox)
+            {
+                isDrivingMode = checkBox.IsChecked ?? false;
+                // Reset throttle to neutral when toggling
+                throttleValue = 90;
+                UpdateThrottleUI();
+            }
+        }
+
+        private void UpdateSteeringOffsetLabel()
+        {
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                var label = this.FindControl<TextBlock>("SteeringOffsetLabel");
+                if (label != null)
+                {
+                    label.Text = $"({steeringOffset})";
+                }
+            });
+        }
+
+        private void SteeringOffsetNumeric_ValueChanged(object? sender, Avalonia.Controls.NumericUpDownValueChangedEventArgs e)
+        {
+            steeringOffset = (int)(e.NewValue ?? 0);
+            UpdateSteeringOffsetLabel();
+            UpdateSteeringUI();
         }
 
         private void UpdateSteeringUI()
@@ -286,28 +312,23 @@ namespace RCCarController
             });
         }
 
-        private void SerialPort_DataReceived(object sender, System.IO.Ports.SerialDataReceivedEventArgs e)
+        private void SerialManager_DataReceived(string data)
         {
-            try
-            {
-                string data = serialPort.ReadLine().Trim();
-                UpdateLatestAckLabel(data);
-                LogMessage($"Received: {data}");
-                // if (data.StartsWith("OK:"))
-                // {
-                //     // This is an acknowledgement with current values
-                //     // LogMessage($"Received ack: {data}");
-                // }
-                // else
-                // {
-                //     // Other data
-                //     // LogMessage($"Received: {data}");
-                // }
-            }
-            catch (Exception ex)
-            {
-                LogMessage("Serial read error: " + ex.Message);
-            }
+            UpdateLatestAckLabel(data);
+            LogMessage($"Received: {data}");
+        }
+
+        private void SerialManager_TransmissionError(string error)
+        {
+            LogMessage("Transmission error: " + error);
+        }
+
+        private void GameControllerManager_ControlValuesChanged(int steering, int throttle)
+        {
+            steeringValue = steering;
+            throttleValue = throttle;
+            UpdateSteeringUI();
+            UpdateThrottleUI();
         }
 
         private void RefreshButton_Click(object? sender, RoutedEventArgs e)
@@ -321,7 +342,7 @@ namespace RCCarController
             if (portComboBox != null)
             {
                 portComboBox.Items.Clear();
-                string[] ports = SerialPort.GetPortNames();
+                string[] ports = serialManager.GetAvailablePorts();
                 foreach (var port in ports)
                 {
                     portComboBox.Items.Add(port);
@@ -329,9 +350,9 @@ namespace RCCarController
 
                 if (ports.Length > 0)
                 {
-                    if (!string.IsNullOrEmpty(savedPort) && ports.Contains(savedPort))
+                    if (!string.IsNullOrEmpty(settingsManager.SavedPort) && ports.Contains(settingsManager.SavedPort))
                     {
-                        portComboBox.SelectedItem = savedPort;
+                        portComboBox.SelectedItem = settingsManager.SavedPort;
                     }
                     else
                     {
@@ -345,7 +366,7 @@ namespace RCCarController
 
         private async void ConnectButton_Click(object? sender, RoutedEventArgs e)
         {
-            if (!isConnected)
+            if (!serialManager.IsConnected)
             {
                 await Connect();
             }
@@ -376,20 +397,22 @@ namespace RCCarController
                 string portName = portComboBox.SelectedItem.ToString();
                 string baudRateStr = (baudComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? baudComboBox.SelectedItem?.ToString() ?? "115200";
 
-                serialPort = new SerialPort(portName, int.Parse(baudRateStr));
-                serialPort.DataReceived += SerialPort_DataReceived;
-                serialPort.Open();
+                bool success = await serialManager.Connect(portName, int.Parse(baudRateStr));
+                if (success)
+                {
+                    connectButton.Content = "Disconnect";
+                    statusLabel.Text = "Connected";
+                    statusLabel.Classes.Clear();
+                    statusLabel.Classes.Add("green");
+                    transmitTimer?.Start();
 
-                isConnected = true;
-                connectButton.Content = "Disconnect";
-                statusLabel.Text = "Connected";
-                statusLabel.Classes.Clear();
-                statusLabel.Classes.Add("green");
-                transmitTimer?.Start();
-
-                LogMessage($"Connected to {serialPort.PortName} at {serialPort.BaudRate} baud");
-                SaveSettings();
-
+                    LogMessage($"Connected to {portName} at {baudRateStr} baud");
+                    settingsManager.SaveSettings(portName, baudComboBox.SelectedItem);
+                }
+                else
+                {
+                    await ShowMessage("Failed to connect", "Error");
+                }
             }
             catch (Exception ex)
             {
@@ -403,31 +426,20 @@ namespace RCCarController
             var connectButton = this.FindControl<Button>("ConnectButton");
             var statusLabel = this.FindControl<TextBlock>("StatusLabel");
 
-            try
+            serialManager.Disconnect();
+            transmitTimer?.Stop();
+            if (connectButton != null) connectButton.Content = "Connect";
+            if (statusLabel != null)
             {
-                transmitTimer?.Stop();
-                if (serialPort != null && serialPort.IsOpen)
-                {
-                    serialPort.Close();
-                }
-                isConnected = false;
-                if (connectButton != null) connectButton.Content = "Connect";
-                if (statusLabel != null)
-                {
-                    statusLabel.Text = "Disconnected";
-                    statusLabel.Classes.Clear();
-                    statusLabel.Classes.Add("red");
-                }
-
-                UpdateLatestMessageLabel("(disconnected)");
-                UpdateLatestAckLabel("(waiting)");
-
-                LogMessage("Disconnected");
+                statusLabel.Text = "Disconnected";
+                statusLabel.Classes.Clear();
+                statusLabel.Classes.Add("red");
             }
-            catch (Exception ex)
-            {
-                LogMessage("Disconnection error: " + ex.Message);
-            }
+
+            UpdateLatestMessageLabel(serialManager.LatestMessage);
+            UpdateLatestAckLabel("(waiting)");
+
+            LogMessage("Disconnected");
         }
 
         private async Task ShowMessage(string message, string title)
@@ -466,83 +478,12 @@ namespace RCCarController
             });
         }
 
-        private void LoadSettings()
-        {
-            try
-            {
-                var baudComboBox = this.FindControl<ComboBox>("BaudComboBox");
-                if (File.Exists(SETTINGS_FILE))
-                {
-                    var lines = File.ReadAllLines(SETTINGS_FILE);
-                    foreach (var line in lines)
-                    {
-                        var parts = line.Split('=');
-                        if (parts.Length == 2)
-                        {
-                            switch (parts[0])
-                            {
-                                case "Port":
-                                    savedPort = parts[1];
-                                    break;
-                                case "Baud":
-                                    if (baudComboBox != null)
-                                    {
-                                        foreach (var item in baudComboBox.Items)
-                                        {
-                                            if (item is ComboBoxItem cbi && cbi.Content?.ToString() == parts[1])
-                                            {
-                                                baudComboBox.SelectedItem = cbi;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    break;
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LogMessage("Settings load error: " + ex.Message);
-            }
-        }
-
-        private void SaveSettings()
-        {
-            try
-            {
-                var portComboBox = this.FindControl<ComboBox>("PortComboBox");
-                var baudComboBox = this.FindControl<ComboBox>("BaudComboBox");
-
-                var settings = new List<string>();
-                if (portComboBox?.SelectedItem != null)
-                    settings.Add($"Port={portComboBox.SelectedItem}");
-                if (baudComboBox?.SelectedItem != null)
-                {
-                    string baudValue = (baudComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? baudComboBox.SelectedItem.ToString();
-                    settings.Add($"Baud={baudValue}");
-                }
-
-                File.WriteAllLines(SETTINGS_FILE, settings);
-            }
-            catch (Exception ex)
-            {
-                LogMessage("Settings save error: " + ex.Message);
-            }
-        }
-
         protected override void OnClosing(WindowClosingEventArgs e)
         {
             Disconnect();
             if (OperatingSystem.IsWindows())
             {
-                if (joystick != null)
-                {
-                    joystick.Unacquire();
-                    joystick.Dispose();
-                }
-                directInput?.Dispose();
+                gameControllerManager.Dispose();
             }
             base.OnClosing(e);
         }
