@@ -19,12 +19,17 @@ namespace RCCarController
         private SerialManager serialManager;
         private GameControllerManager gameControllerManager;
         private SettingsManager settingsManager;
+        private WebSocketInputManager webSocketInputManager;
 
         // Control Values
         private int steeringValue = 90;  // 0-180
-        private int throttleValue = 90;  // 1-180 (neutral)
+        private int throttleValue = 90;  // 0-180 (neutral)
         private bool isDrivingMode = false;
         private int steeringOffset = 0;
+        private bool webSocketClientEnabled = true;
+        private bool reverseSteeringInput = false;
+        private bool reverseThrottleInput = false;
+        private bool isUpdatingFromWebSocket = false;
 
         // Transmit Timer
         private System.Timers.Timer? transmitTimer;
@@ -35,6 +40,9 @@ namespace RCCarController
             serialManager = new SerialManager();
             gameControllerManager = new GameControllerManager();
             settingsManager = new SettingsManager();
+            webSocketInputManager = new WebSocketInputManager();
+            webSocketInputManager.ControlValuesChanged += WebSocketInputManager_ControlValuesChanged;
+            webSocketInputManager.StatusChanged += WebSocketInputManager_StatusChanged;
             if (OperatingSystem.IsWindows())
             {
                 gameControllerManager.Initialize();
@@ -63,6 +71,9 @@ namespace RCCarController
             var baudComboBox = this.FindControl<ComboBox>("BaudComboBox");
             var drivingModeToggle = this.FindControl<CheckBox>("DrivingModeToggle");
             var steeringOffsetNumeric = this.FindControl<NumericUpDown>("SteeringOffsetNumeric");
+            var webSocketToggle = this.FindControl<CheckBox>("WebSocketToggle");
+            var reverseSteeringToggle = this.FindControl<CheckBox>("ReverseSteeringToggle");
+            var reverseThrottleToggle = this.FindControl<CheckBox>("ReverseThrottleToggle");
 
             // Wire up events
             if (steeringSlider != null) steeringSlider.ValueChanged += SteeringSlider_ValueChanged;
@@ -73,6 +84,9 @@ namespace RCCarController
             if (connectButton != null) connectButton.Click += ConnectButton_Click;
             if (drivingModeToggle != null) drivingModeToggle.IsCheckedChanged += DrivingModeToggle_IsCheckedChanged;
             if (steeringOffsetNumeric != null) steeringOffsetNumeric.ValueChanged += SteeringOffsetNumeric_ValueChanged;
+            if (webSocketToggle != null) webSocketToggle.IsCheckedChanged += WebSocketToggle_IsCheckedChanged;
+            if (reverseSteeringToggle != null) reverseSteeringToggle.IsCheckedChanged += ReverseSteeringToggle_IsCheckedChanged;
+            if (reverseThrottleToggle != null) reverseThrottleToggle.IsCheckedChanged += ReverseThrottleToggle_IsCheckedChanged;
 
             // Key handling
             this.KeyDown += OnKeyDown;
@@ -85,14 +99,25 @@ namespace RCCarController
 
             // Load settings
             if (baudComboBox != null) settingsManager.LoadSettings(baudComboBox);
+            webSocketClientEnabled = settingsManager.WebSocketEnabled;
+            reverseSteeringInput = settingsManager.ReverseSteeringInput;
+            reverseThrottleInput = settingsManager.ReverseThrottleInput;
+
+            if (webSocketToggle != null) webSocketToggle.IsChecked = webSocketClientEnabled;
+            if (reverseSteeringToggle != null) reverseSteeringToggle.IsChecked = reverseSteeringInput;
+            if (reverseThrottleToggle != null) reverseThrottleToggle.IsChecked = reverseThrottleInput;
 
             // Now safe to refresh ports
             RefreshPorts();
             UpdateSteeringOffsetLabel();
+            ApplyWebSocketEnabledState();
         }
 
         private void OnKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
         {
+            if (webSocketClientEnabled)
+                return;
+
             switch (e.Key)
             {
                 case Avalonia.Input.Key.A:
@@ -127,7 +152,7 @@ namespace RCCarController
                     }
                     else
                     {
-                        throttleValue = Math.Min(140, throttleValue + 1);
+                        throttleValue = Math.Min(180, throttleValue + 1);
                     }
                     UpdateThrottleUI();
                     break;
@@ -139,7 +164,7 @@ namespace RCCarController
                     }
                     else
                     {
-                        throttleValue = Math.Max(40, throttleValue - 1);
+                        throttleValue = Math.Max(0, throttleValue - 1);
                     }
                     UpdateThrottleUI();
                     break;
@@ -148,6 +173,9 @@ namespace RCCarController
 
         private void OnKeyUp(object? sender, Avalonia.Input.KeyEventArgs e)
         {
+            if (webSocketClientEnabled)
+                return;
+
             if (isDrivingMode)
             {
                 switch (e.Key)
@@ -172,6 +200,9 @@ namespace RCCarController
 
         private void SteeringSlider_ValueChanged(object? sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e)
         {
+            if (webSocketClientEnabled && !isUpdatingFromWebSocket)
+                return;
+
             var steeringNumeric = this.FindControl<NumericUpDown>("SteeringNumeric");
             if (steeringNumeric != null)
             {
@@ -184,7 +215,7 @@ namespace RCCarController
         private void SetupTransmitTimer()
         {
             transmitTimer = new System.Timers.Timer();
-            transmitTimer.Interval = 20; // 20ms
+            transmitTimer.Interval = 30; // 20ms
             transmitTimer.Elapsed += TransmitTimer_Tick;
         }
 
@@ -193,20 +224,25 @@ namespace RCCarController
             if (serialManager.IsConnected)
             {
                 // Poll game controller on Windows
-                if (OperatingSystem.IsWindows())
+                if (OperatingSystem.IsWindows() && !webSocketClientEnabled)
                 {
                     gameControllerManager.Poll();
                 }
 
                 // Send command
-                int effectiveSteering = Math.Clamp(steeringValue + steeringOffset, 0, 180);
-                serialManager.SendCommand(effectiveSteering, throttleValue);
+                int effectiveSteering = Math.Clamp(ApplySteeringDirection(steeringValue) + steeringOffset, 0, 180);
+                int effectiveThrottle = Math.Clamp(ApplyThrottleDirection(throttleValue), 0, 180);
+
+                serialManager.SendCommand(effectiveSteering, effectiveThrottle);
                 UpdateLatestMessageLabel(serialManager.LatestMessage);
             }
         }
 
         private void SteeringNumeric_ValueChanged(object? sender, Avalonia.Controls.NumericUpDownValueChangedEventArgs e)
         {
+            if (webSocketClientEnabled && !isUpdatingFromWebSocket)
+                return;
+
             var steeringSlider = this.FindControl<Slider>("SteeringSlider");
             if (steeringSlider != null)
             {
@@ -218,20 +254,28 @@ namespace RCCarController
 
         private void ThrottleSlider_ValueChanged(object? sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e)
         {
+            if (webSocketClientEnabled && !isUpdatingFromWebSocket)
+                return;
+
             var throttleNumeric = this.FindControl<NumericUpDown>("ThrottleNumeric");
             if (throttleNumeric != null)
             {
                 throttleValue = (int)e.NewValue;
+                throttleValue = Math.Clamp(throttleValue, 0, 180);
                 throttleNumeric.Value = throttleValue;
             }
         }
 
         private void ThrottleNumeric_ValueChanged(object? sender, Avalonia.Controls.NumericUpDownValueChangedEventArgs e)
         {
+            if (webSocketClientEnabled && !isUpdatingFromWebSocket)
+                return;
+
             var throttleSlider = this.FindControl<Slider>("ThrottleSlider");
             if (throttleSlider != null)
             {
                 throttleValue = (int)e.NewValue;
+                throttleValue = Math.Clamp(throttleValue, 0, 180);
                 throttleSlider.Value = throttleValue;
             }
         }
@@ -245,6 +289,25 @@ namespace RCCarController
                 throttleValue = 90;
                 UpdateThrottleUI();
             }
+        }
+
+        private void WebSocketToggle_IsCheckedChanged(object? sender, RoutedEventArgs e)
+        {
+            webSocketClientEnabled = (sender as CheckBox)?.IsChecked ?? true;
+            ApplyWebSocketEnabledState();
+            settingsManager.SaveSettings(websocketEnabled: webSocketClientEnabled);
+        }
+
+        private void ReverseSteeringToggle_IsCheckedChanged(object? sender, RoutedEventArgs e)
+        {
+            reverseSteeringInput = (sender as CheckBox)?.IsChecked ?? false;
+            settingsManager.SaveSettings(reverseSteering: reverseSteeringInput);
+        }
+
+        private void ReverseThrottleToggle_IsCheckedChanged(object? sender, RoutedEventArgs e)
+        {
+            reverseThrottleInput = (sender as CheckBox)?.IsChecked ?? false;
+            settingsManager.SaveSettings(reverseThrottle: reverseThrottleInput);
         }
 
         private void UpdateSteeringOffsetLabel()
@@ -288,6 +351,48 @@ namespace RCCarController
             });
         }
 
+        private void UpdateWebSocketStatus(string status)
+        {
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                var statusLabel = this.FindControl<TextBlock>("WebSocketStatusLabel");
+                if (statusLabel != null)
+                {
+                    statusLabel.Text = $"WebSocket: {status}";
+                }
+            });
+        }
+
+        private void ApplyWebSocketEnabledState()
+        {
+            if (webSocketClientEnabled)
+            {
+                UpdateWebSocketStatus("Enabled (connecting...)");
+                webSocketInputManager.Start();
+            }
+            else
+            {
+                webSocketInputManager.Stop();
+                UpdateWebSocketStatus("Disabled");
+            }
+        }
+
+        private void WebSocketInputManager_StatusChanged(string status)
+        {
+            UpdateWebSocketStatus(status);
+            LogMessage($"WebSocket: {status}");
+        }
+
+        private void WebSocketInputManager_ControlValuesChanged(int steering, int throttle)
+        {
+            isUpdatingFromWebSocket = true;
+            steeringValue = Math.Clamp(steering, 0, 180);
+            throttleValue = Math.Clamp(throttle, 0, 180);
+            UpdateSteeringUI();
+            UpdateThrottleUI();
+            isUpdatingFromWebSocket = false;
+        }
+
         private void UpdateLatestMessageLabel(string message)
         {
             Dispatcher.UIThread.InvokeAsync(() =>
@@ -325,8 +430,11 @@ namespace RCCarController
 
         private void GameControllerManager_ControlValuesChanged(int steering, int throttle)
         {
-            steeringValue = steering;
-            throttleValue = throttle;
+            if (webSocketClientEnabled)
+                return;
+
+            steeringValue = Math.Clamp(steering, 0, 180);
+            throttleValue = Math.Clamp(throttle, 0, 180);
             UpdateSteeringUI();
             UpdateThrottleUI();
         }
@@ -449,7 +557,7 @@ namespace RCCarController
                 Title = title,
                 Content = new TextBlock { Text = message, Margin = new Avalonia.Thickness(20) },
                 Width = 300,
-                Height = 150,
+                Height = 200,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner
             };
             await dialog.ShowDialog(this);
@@ -478,6 +586,16 @@ namespace RCCarController
             });
         }
 
+        private int ApplySteeringDirection(int value)
+        {
+            return reverseSteeringInput ? 180 - value : value;
+        }
+
+        private int ApplyThrottleDirection(int value)
+        {
+            return reverseThrottleInput ? 180 - value : value;
+        }
+
         protected override void OnClosing(WindowClosingEventArgs e)
         {
             Disconnect();
@@ -485,6 +603,7 @@ namespace RCCarController
             {
                 gameControllerManager.Dispose();
             }
+            webSocketInputManager.Dispose();
             base.OnClosing(e);
         }
     }

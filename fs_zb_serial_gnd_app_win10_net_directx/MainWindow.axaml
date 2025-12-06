@@ -2,10 +2,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="RCCarController.MainWindow"
         Title="RC Car Controller"
-        Width="600" Height="500"
+        Width="600" Height="800"
         WindowStartupLocation="CenterScreen">
     <Grid Margin="10">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -24,10 +25,10 @@
 
         <!-- Throttle Controls -->
         <StackPanel Grid.Row="1" Margin="0,0,0,10">
-            <TextBlock Text="Throttle (40-140)" FontWeight="Bold" Margin="0,0,0,5"/>
+            <TextBlock Text="Throttle (0-180)" FontWeight="Bold" Margin="0,0,0,5"/>
             <StackPanel Orientation="Horizontal">
-                <Slider x:Name="ThrottleSlider" Minimum="40" Maximum="140" Value="90" Width="150" Margin="0,0,10,0"/>
-                <NumericUpDown x:Name="ThrottleNumeric" Minimum="40" Maximum="140" Value="90" Width="60"/>
+                <Slider x:Name="ThrottleSlider" Minimum="0" Maximum="180" Value="90" Width="150" Margin="0,0,10,0"/>
+                <NumericUpDown x:Name="ThrottleNumeric" Minimum="0" Maximum="180" Value="90" Width="60"/>
             </StackPanel>
         </StackPanel>
 
@@ -42,8 +43,21 @@
             </StackPanel>
         </StackPanel>
 
-                <!-- Serial Port Controls -->
+        <!-- WebSocket Controls -->
         <StackPanel Grid.Row="3" Margin="0,0,0,10">
+            <TextBlock Text="WebSocket Input" FontWeight="Bold" Margin="0,0,0,5"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                <CheckBox x:Name="WebSocketToggle" Content="Enable WebSocket client" IsChecked="True" Margin="0,0,15,0"/>
+                <TextBlock x:Name="WebSocketStatusLabel" Text="WebSocket: Initializing" VerticalAlignment="Center" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <CheckBox x:Name="ReverseSteeringToggle" Content="Reverse Steering"/>
+                <CheckBox x:Name="ReverseThrottleToggle" Content="Reverse Throttle"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Serial Port Controls -->
+        <StackPanel Grid.Row="4" Margin="0,0,0,10">
             <TextBlock Text="Serial Connection" FontWeight="Bold" Margin="0,0,0,5"/>
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="Port:" VerticalAlignment="Center" Margin="0,0,5,0"/>
@@ -65,7 +79,7 @@
         </StackPanel>
 
         <!-- Debug Log -->
-        <StackPanel Grid.Row="4">
+        <StackPanel Grid.Row="5">
             <TextBlock Text="Debug Log" FontWeight="Bold" Margin="0,0,0,5"/>
             <ScrollViewer VerticalScrollBarVisibility="Auto" Height="200">
                 <TextBox x:Name="LogTextBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="10"/>

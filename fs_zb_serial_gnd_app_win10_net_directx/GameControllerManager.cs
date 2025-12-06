@@ -48,7 +48,7 @@ namespace RCCarController
                 int steeringValue = (int)MapRange(steeringAxis, 0, 65535, 0, 180);
 
                 int throttleAxis = state.Y;
-                int throttleValue = (int)MapRange(throttleAxis, 0, 65535, 40, 140);
+                int throttleValue = (int)MapRange(throttleAxis, 0, 65535, 0, 180);
 
                 ControlValuesChanged?.Invoke(steeringValue, throttleValue);
             }

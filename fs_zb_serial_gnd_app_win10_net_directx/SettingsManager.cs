@@ -8,11 +8,19 @@ namespace RCCarController
         private const string SETTINGS_FILE = "settings.ini";
 
         public string? SavedPort { get; private set; }
+        public string? SavedBaud { get; private set; }
+        public bool WebSocketEnabled { get; private set; } = true;
+        public bool ReverseSteeringInput { get; private set; }
+        public bool ReverseThrottleInput { get; private set; }
 
         public void LoadSettings(ComboBox baudComboBox)
         {
             try
             {
+                WebSocketEnabled = true;
+                ReverseSteeringInput = false;
+                ReverseThrottleInput = false;
+
                 if (File.Exists(SETTINGS_FILE))
                 {
                     var lines = File.ReadAllLines(SETTINGS_FILE);
@@ -27,6 +35,7 @@ namespace RCCarController
                                     SavedPort = parts[1];
                                     break;
                                 case "Baud":
+                                    SavedBaud = parts[1];
                                     if (baudComboBox != null)
                                     {
                                         foreach (var item in baudComboBox.Items)
@@ -37,6 +46,24 @@ namespace RCCarController
                                                 break;
                                             }
                                         }
+                                    }
+                                    break;
+                                case "WebSocketEnabled":
+                                    if (bool.TryParse(parts[1], out var wsEnabled))
+                                    {
+                                        WebSocketEnabled = wsEnabled;
+                                    }
+                                    break;
+                                case "ReverseSteering":
+                                    if (bool.TryParse(parts[1], out var reverseSteering))
+                                    {
+                                        ReverseSteeringInput = reverseSteering;
+                                    }
+                                    break;
+                                case "ReverseThrottle":
+                                    if (bool.TryParse(parts[1], out var reverseThrottle))
+                                    {
+                                        ReverseThrottleInput = reverseThrottle;
                                     }
                                     break;
                             }
@@ -50,18 +77,38 @@ namespace RCCarController
             }
         }
 
-        public void SaveSettings(string? port, object? baudItem)
+        public void SaveSettings(
+            string? port = null,
+            object? baudItem = null,
+            bool? websocketEnabled = null,
+            bool? reverseSteering = null,
+            bool? reverseThrottle = null)
         {
             try
             {
-                var settings = new List<string>();
-                if (!string.IsNullOrEmpty(port))
-                    settings.Add($"Port={port}");
+                if (port != null)
+                    SavedPort = port;
+
                 if (baudItem != null)
                 {
-                    string baudValue = (baudItem as ComboBoxItem)?.Content?.ToString() ?? baudItem.ToString();
-                    settings.Add($"Baud={baudValue}");
+                    SavedBaud = (baudItem as ComboBoxItem)?.Content?.ToString() ?? baudItem.ToString();
                 }
+
+                if (websocketEnabled.HasValue)
+                    WebSocketEnabled = websocketEnabled.Value;
+                if (reverseSteering.HasValue)
+                    ReverseSteeringInput = reverseSteering.Value;
+                if (reverseThrottle.HasValue)
+                    ReverseThrottleInput = reverseThrottle.Value;
+
+                var settings = new List<string>();
+                if (!string.IsNullOrEmpty(SavedPort))
+                    settings.Add($"Port={SavedPort}");
+                if (!string.IsNullOrEmpty(SavedBaud))
+                    settings.Add($"Baud={SavedBaud}");
+                settings.Add($"WebSocketEnabled={WebSocketEnabled}");
+                settings.Add($"ReverseSteering={ReverseSteeringInput}");
+                settings.Add($"ReverseThrottle={ReverseThrottleInput}");
 
                 File.WriteAllLines(SETTINGS_FILE, settings);
             }

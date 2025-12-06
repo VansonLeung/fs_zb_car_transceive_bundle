@@ -97,7 +97,7 @@ void processCommand(char* command) {
     targetThrottleValue = atoi(throttleStr);
 
     // Validate ranges
-    if (targetSteeringValue >= 0 && targetSteeringValue <= 180) {
+    if (targetSteeringValue >= 5 && targetSteeringValue <= 175) {
       // Limit max change to 20
       int diff = targetSteeringValue - steeringValue;
       if (abs(diff) > 20) {
@@ -110,11 +110,11 @@ void processCommand(char* command) {
       // Serial.println(steeringValue);
     }
 
-    if (targetThrottleValue >= 40 && targetThrottleValue <= 140) {
+    if (targetThrottleValue >= 15 && targetThrottleValue <= 160) {
       // Limit max change to 3
       int diff = targetThrottleValue - throttleValue;
-      if (abs(diff) > 3) {
-        throttleValue += (diff > 0) ? 3 : -3;
+      if (abs(diff) > 5) {
+        throttleValue += (diff > 0) ? 5 : -5;
       } else {
         throttleValue = targetThrottleValue;
       }
