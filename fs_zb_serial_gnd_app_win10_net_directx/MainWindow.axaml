@@ -2,88 +2,114 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="RCCarController.MainWindow"
         Title="RC Car Controller"
-        Width="600" Height="800"
+        Width="700" Height="820"
         WindowStartupLocation="CenterScreen">
-    <Grid Margin="10">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+    <TabControl>
+        <TabItem Header="Drive">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <Grid Margin="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
 
-        <!-- Steering Controls -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,10">
-            <TextBlock Text="Steering (0-180)" FontWeight="Bold" Margin="0,0,0,5"/>
-            <StackPanel Orientation="Horizontal">
-                <Slider x:Name="SteeringSlider" Minimum="0" Maximum="180" Value="90" Width="150" Margin="0,0,10,0"/>
-                <NumericUpDown x:Name="SteeringNumeric" Minimum="0" Maximum="180" Value="90" Width="60"/>
-            </StackPanel>
-        </StackPanel>
+                    <!-- Steering Controls -->
+                    <StackPanel Grid.Row="0" Margin="0,0,0,10">
+                        <TextBlock Text="Steering (0-180)" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Slider x:Name="SteeringSlider" Minimum="0" Maximum="180" Value="90" Width="200" Margin="0,0,10,0"/>
+                            <NumericUpDown x:Name="SteeringNumeric" Minimum="0" Maximum="180" Value="90" Width="80"/>
+                        </StackPanel>
+                    </StackPanel>
 
-        <!-- Throttle Controls -->
-        <StackPanel Grid.Row="1" Margin="0,0,0,10">
-            <TextBlock Text="Throttle (0-180)" FontWeight="Bold" Margin="0,0,0,5"/>
-            <StackPanel Orientation="Horizontal">
-                <Slider x:Name="ThrottleSlider" Minimum="0" Maximum="180" Value="90" Width="150" Margin="0,0,10,0"/>
-                <NumericUpDown x:Name="ThrottleNumeric" Minimum="0" Maximum="180" Value="90" Width="60"/>
-            </StackPanel>
-        </StackPanel>
+                    <!-- Throttle Controls -->
+                    <StackPanel Grid.Row="1" Margin="0,0,0,10">
+                        <TextBlock Text="Throttle (0-180)" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Slider x:Name="ThrottleSlider" Minimum="0" Maximum="180" Value="90" Width="200" Margin="0,0,10,0"/>
+                            <NumericUpDown x:Name="ThrottleNumeric" Minimum="0" Maximum="180" Value="90" Width="80"/>
+                        </StackPanel>
+                    </StackPanel>
 
-        <!-- Driving Mode and Steering Offset -->
-        <StackPanel Grid.Row="2" Margin="0,0,0,10">
-            <TextBlock Text="Driving Mode and Steering Offset" FontWeight="Bold" Margin="0,0,0,5"/>
-            <StackPanel Orientation="Horizontal">
-                <CheckBox x:Name="DrivingModeToggle" Content="Driving Mode" Margin="0,0,20,0"/>
-                <TextBlock Text="Steering Offset:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                <NumericUpDown x:Name="SteeringOffsetNumeric" Minimum="-50" Maximum="50" Value="0" Width="60"/>
-                <TextBlock x:Name="SteeringOffsetLabel" Text="(0)" VerticalAlignment="Center" Margin="5,0,0,0" FontWeight="Bold"/>
-            </StackPanel>
-        </StackPanel>
+                    <!-- Driving Mode and Steering Offset -->
+                    <StackPanel Grid.Row="2" Margin="0,0,0,10">
+                        <TextBlock Text="Driving Mode and Steering Offset" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <CheckBox x:Name="DrivingModeToggle" Content="Driving Mode"/>
+                            <TextBlock Text="Steering Offset:" VerticalAlignment="Center"/>
+                            <NumericUpDown x:Name="SteeringOffsetNumeric" Minimum="-50" Maximum="50" Value="0" Width="80"/>
+                            <TextBlock x:Name="SteeringOffsetLabel" Text="(0)" VerticalAlignment="Center" FontWeight="Bold"/>
+                        </StackPanel>
+                    </StackPanel>
 
-        <!-- WebSocket Controls -->
-        <StackPanel Grid.Row="3" Margin="0,0,0,10">
-            <TextBlock Text="WebSocket Input" FontWeight="Bold" Margin="0,0,0,5"/>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                <CheckBox x:Name="WebSocketToggle" Content="Enable WebSocket client" IsChecked="True" Margin="0,0,15,0"/>
-                <TextBlock x:Name="WebSocketStatusLabel" Text="WebSocket: Initializing" VerticalAlignment="Center" />
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" Spacing="10">
-                <CheckBox x:Name="ReverseSteeringToggle" Content="Reverse Steering"/>
-                <CheckBox x:Name="ReverseThrottleToggle" Content="Reverse Throttle"/>
-            </StackPanel>
-        </StackPanel>
+                    <!-- WebSocket Controls -->
+                    <StackPanel Grid.Row="3" Margin="0,0,0,10">
+                        <TextBlock Text="WebSocket Input" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,5" Spacing="15">
+                            <CheckBox x:Name="WebSocketToggle" Content="Enable WebSocket client" IsChecked="True"/>
+                            <TextBlock x:Name="WebSocketStatusLabel" Text="WebSocket: Initializing" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="15">
+                            <CheckBox x:Name="ReverseSteeringToggle" Content="Reverse Steering"/>
+                            <CheckBox x:Name="ReverseThrottleToggle" Content="Reverse Throttle"/>
+                        </StackPanel>
+                    </StackPanel>
 
-        <!-- Serial Port Controls -->
-        <StackPanel Grid.Row="4" Margin="0,0,0,10">
-            <TextBlock Text="Serial Connection" FontWeight="Bold" Margin="0,0,0,5"/>
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="Port:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                <ComboBox x:Name="PortComboBox" Width="100" Margin="0,0,10,0"/>
-                <TextBlock Text="Baud:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                <ComboBox x:Name="BaudComboBox" Width="80" Margin="0,0,10,0">
-                    <ComboBoxItem>9600</ComboBoxItem>
-                    <ComboBoxItem>19200</ComboBoxItem>
-                    <ComboBoxItem>38400</ComboBoxItem>
-                    <ComboBoxItem>57600</ComboBoxItem>
-                    <ComboBoxItem IsSelected="True">115200</ComboBoxItem>
-                </ComboBox>
-                <Button x:Name="RefreshButton" Content="Refresh" Margin="0,0,10,0"/>
-                <Button x:Name="ConnectButton" Content="Connect" Margin="0,0,10,0"/>
-                <TextBlock x:Name="StatusLabel" Text="Disconnected" Foreground="Red" VerticalAlignment="Center"/>
-            </StackPanel>
-            <TextBlock x:Name="LatestMessageLabel" Text="Latest: (not connected)" FontWeight="Bold" Margin="0,5,0,0" FontFamily="Consolas" FontSize="12"/>
-            <TextBlock x:Name="LatestAckLabel" Text="Ack: (waiting)" FontWeight="Bold" Margin="0,2,0,0" FontFamily="Consolas" FontSize="12" Foreground="Green"/>
-        </StackPanel>
+                    <!-- Serial Port Controls -->
+                    <StackPanel Grid.Row="4" Margin="0,0,0,10">
+                        <TextBlock Text="Serial Connection" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="Port:" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="PortComboBox" Width="120"/>
+                            <TextBlock Text="Baud:" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="BaudComboBox" Width="100">
+                                <ComboBoxItem>9600</ComboBoxItem>
+                                <ComboBoxItem>19200</ComboBoxItem>
+                                <ComboBoxItem>38400</ComboBoxItem>
+                                <ComboBoxItem>57600</ComboBoxItem>
+                                <ComboBoxItem IsSelected="True">115200</ComboBoxItem>
+                            </ComboBox>
+                            <Button x:Name="RefreshButton" Content="Refresh"/>
+                            <Button x:Name="ConnectButton" Content="Connect"/>
+                            <TextBlock x:Name="StatusLabel" Text="Disconnected" Foreground="Red" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <CheckBox x:Name="AutoConnectToggle" Content="Auto-connect serial every 10 seconds" Margin="0,6,0,0"/>
+                        <TextBlock x:Name="LatestMessageLabel" Text="Latest: (not connected)" FontWeight="Bold" Margin="0,5,0,0" FontFamily="Consolas" FontSize="12"/>
+                        <TextBlock x:Name="LatestAckLabel" Text="Ack: (waiting)" FontWeight="Bold" Margin="0,2,0,0" FontFamily="Consolas" FontSize="12" Foreground="Green"/>
+                    </StackPanel>
 
-        <!-- Debug Log -->
-        <StackPanel Grid.Row="5">
-            <TextBlock Text="Debug Log" FontWeight="Bold" Margin="0,0,0,5"/>
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Height="200">
-                <TextBox x:Name="LogTextBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="10"/>
+                    <!-- Debug Log -->
+                    <StackPanel Grid.Row="5">
+                        <TextBlock Text="Debug Log" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Height="220">
+                            <TextBox x:Name="LogTextBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="10"/>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Grid>
             </ScrollViewer>
-        </StackPanel>
-    </Grid>
+        </TabItem>
+
+        <TabItem Header="MAC Manager">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <Grid Margin="10" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Text="Configured MAC addresses (one per line, e.g. AA:BB:CC:DD:EE:FF)"
+                               FontWeight="Bold" Margin="0,0,0,10"/>
+                    <TextBox Grid.Row="1" x:Name="MacListTextBox" AcceptsReturn="True" Height="220"
+                             FontFamily="Consolas" TextWrapping="NoWrap"/>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" Margin="0,10,0,0">
+                        <Button x:Name="SendMacListButton" Content="Send MAC List" Width="140"/>
+                        <Button x:Name="RequestActiveMacButton" Content="Refresh Active MAC" Width="160"/>
+                    </StackPanel>
+                    <TextBlock Grid.Row="3" Text="Active MAC" FontWeight="Bold" Margin="0,20,0,5"/>
+                    <TextBlock Grid.Row="4" x:Name="ActiveMacDisplayLabel" Text="Active MAC: (unknown)"
+                               FontFamily="Consolas" FontSize="14"/>
+                    <TextBlock Grid.Row="5" Text="Ground station updates its OLED and echoes MACACTIVE messages here." FontStyle="Italic" FontSize="12" Margin="0,10,0,0"/>
+                </Grid>
+            </ScrollViewer>
+        </TabItem>
+    </TabControl>
 </Window>

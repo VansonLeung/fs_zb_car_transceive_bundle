@@ -1,4 +1,6 @@
 using System.IO;
+using System.Collections.Generic;
+using System.Linq;
 using Avalonia.Controls;
 
 namespace RCCarController
@@ -12,6 +14,8 @@ namespace RCCarController
         public bool WebSocketEnabled { get; private set; } = true;
         public bool ReverseSteeringInput { get; private set; }
         public bool ReverseThrottleInput { get; private set; }
+        public bool AutoConnectSerial { get; private set; }
+        public List<string> MacAddresses { get; } = new();
 
         public void LoadSettings(ComboBox baudComboBox)
         {
@@ -20,6 +24,8 @@ namespace RCCarController
                 WebSocketEnabled = true;
                 ReverseSteeringInput = false;
                 ReverseThrottleInput = false;
+                AutoConnectSerial = false;
+                MacAddresses.Clear();
 
                 if (File.Exists(SETTINGS_FILE))
                 {
@@ -66,6 +72,24 @@ namespace RCCarController
                                         ReverseThrottleInput = reverseThrottle;
                                     }
                                     break;
+                                case "AutoConnectSerial":
+                                    if (bool.TryParse(parts[1], out var autoConnect))
+                                    {
+                                        AutoConnectSerial = autoConnect;
+                                    }
+                                    break;
+                                case "MacList":
+                                    var entries = parts[1]
+                                        .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                        .Select(m => m.Trim().ToUpperInvariant())
+                                        .Where(m => !string.IsNullOrWhiteSpace(m))
+                                        .ToList();
+                                    if (entries.Count > 0)
+                                    {
+                                        MacAddresses.Clear();
+                                        MacAddresses.AddRange(entries);
+                                    }
+                                    break;
                             }
                         }
                     }
@@ -82,7 +106,8 @@ namespace RCCarController
             object? baudItem = null,
             bool? websocketEnabled = null,
             bool? reverseSteering = null,
-            bool? reverseThrottle = null)
+            bool? reverseThrottle = null,
+            bool? autoConnectSerial = null)
         {
             try
             {
@@ -100,22 +125,54 @@ namespace RCCarController
                     ReverseSteeringInput = reverseSteering.Value;
                 if (reverseThrottle.HasValue)
                     ReverseThrottleInput = reverseThrottle.Value;
+                if (autoConnectSerial.HasValue)
+                    AutoConnectSerial = autoConnectSerial.Value;
 
-                var settings = new List<string>();
-                if (!string.IsNullOrEmpty(SavedPort))
-                    settings.Add($"Port={SavedPort}");
-                if (!string.IsNullOrEmpty(SavedBaud))
-                    settings.Add($"Baud={SavedBaud}");
-                settings.Add($"WebSocketEnabled={WebSocketEnabled}");
-                settings.Add($"ReverseSteering={ReverseSteeringInput}");
-                settings.Add($"ReverseThrottle={ReverseThrottleInput}");
-
-                File.WriteAllLines(SETTINGS_FILE, settings);
+                WriteSettingsFile();
             }
             catch (Exception)
             {
                 // Handle error
             }
+        }
+
+        public void SaveMacList(IEnumerable<string> macs)
+        {
+            try
+            {
+                MacAddresses.Clear();
+                foreach (var mac in macs)
+                {
+                    if (!string.IsNullOrWhiteSpace(mac))
+                    {
+                        MacAddresses.Add(mac.Trim().ToUpperInvariant());
+                    }
+                }
+                WriteSettingsFile();
+            }
+            catch (Exception)
+            {
+                // Handle error
+            }
+        }
+
+        private void WriteSettingsFile()
+        {
+            var settings = new List<string>();
+            if (!string.IsNullOrEmpty(SavedPort))
+                settings.Add($"Port={SavedPort}");
+            if (!string.IsNullOrEmpty(SavedBaud))
+                settings.Add($"Baud={SavedBaud}");
+            settings.Add($"WebSocketEnabled={WebSocketEnabled}");
+            settings.Add($"ReverseSteering={ReverseSteeringInput}");
+            settings.Add($"ReverseThrottle={ReverseThrottleInput}");
+            settings.Add($"AutoConnectSerial={AutoConnectSerial}");
+            if (MacAddresses.Count > 0)
+            {
+                settings.Add($"MacList={string.Join(';', MacAddresses)}");
+            }
+
+            File.WriteAllLines(SETTINGS_FILE, settings);
         }
     }
 }

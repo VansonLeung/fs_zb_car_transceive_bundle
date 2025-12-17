@@ -4,9 +4,12 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using SharpDX.DirectInput;
+using System;
 using System.Diagnostics;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Ports;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Timers;
@@ -30,9 +33,18 @@ namespace RCCarController
         private bool reverseSteeringInput = false;
         private bool reverseThrottleInput = false;
         private bool isUpdatingFromWebSocket = false;
+        private bool autoConnectSerial = false;
+        private bool connectInProgress = false;
+        private TextBox? macListTextBox;
+        private TextBlock? activeMacDisplayLabel;
+        private Button? sendMacListButton;
+        private Button? requestActiveMacButton;
+        private readonly List<string> macAddresses = new();
+        private const int MaxMacEntries = 8;
 
         // Transmit Timer
         private System.Timers.Timer? transmitTimer;
+        private System.Timers.Timer? autoConnectTimer;
 
         public MainWindow()
         {
@@ -48,6 +60,7 @@ namespace RCCarController
                 gameControllerManager.Initialize();
             }
             SetupTransmitTimer();
+            SetupAutoConnectTimer();
             // RefreshPorts(); // Moved to OnLoaded
         }
 
@@ -74,6 +87,11 @@ namespace RCCarController
             var webSocketToggle = this.FindControl<CheckBox>("WebSocketToggle");
             var reverseSteeringToggle = this.FindControl<CheckBox>("ReverseSteeringToggle");
             var reverseThrottleToggle = this.FindControl<CheckBox>("ReverseThrottleToggle");
+            var autoConnectToggle = this.FindControl<CheckBox>("AutoConnectToggle");
+            macListTextBox = this.FindControl<TextBox>("MacListTextBox");
+            activeMacDisplayLabel = this.FindControl<TextBlock>("ActiveMacDisplayLabel");
+            sendMacListButton = this.FindControl<Button>("SendMacListButton");
+            requestActiveMacButton = this.FindControl<Button>("RequestActiveMacButton");
 
             // Wire up events
             if (steeringSlider != null) steeringSlider.ValueChanged += SteeringSlider_ValueChanged;
@@ -87,6 +105,10 @@ namespace RCCarController
             if (webSocketToggle != null) webSocketToggle.IsCheckedChanged += WebSocketToggle_IsCheckedChanged;
             if (reverseSteeringToggle != null) reverseSteeringToggle.IsCheckedChanged += ReverseSteeringToggle_IsCheckedChanged;
             if (reverseThrottleToggle != null) reverseThrottleToggle.IsCheckedChanged += ReverseThrottleToggle_IsCheckedChanged;
+            if (autoConnectToggle != null) autoConnectToggle.IsCheckedChanged += AutoConnectToggle_IsCheckedChanged;
+            if (sendMacListButton != null) sendMacListButton.Click += SendMacListButton_Click;
+            if (requestActiveMacButton != null) requestActiveMacButton.Click += RequestActiveMacButton_Click;
+            if (macListTextBox != null) macListTextBox.LostFocus += MacListTextBox_LostFocus;
 
             // Key handling
             this.KeyDown += OnKeyDown;
@@ -102,15 +124,21 @@ namespace RCCarController
             webSocketClientEnabled = settingsManager.WebSocketEnabled;
             reverseSteeringInput = settingsManager.ReverseSteeringInput;
             reverseThrottleInput = settingsManager.ReverseThrottleInput;
+            autoConnectSerial = settingsManager.AutoConnectSerial;
+            macAddresses.Clear();
+            macAddresses.AddRange(settingsManager.MacAddresses);
 
             if (webSocketToggle != null) webSocketToggle.IsChecked = webSocketClientEnabled;
             if (reverseSteeringToggle != null) reverseSteeringToggle.IsChecked = reverseSteeringInput;
             if (reverseThrottleToggle != null) reverseThrottleToggle.IsChecked = reverseThrottleInput;
+            if (autoConnectToggle != null) autoConnectToggle.IsChecked = autoConnectSerial;
+            UpdateMacListTextBox();
 
             // Now safe to refresh ports
             RefreshPorts();
             UpdateSteeringOffsetLabel();
             ApplyWebSocketEnabledState();
+            UpdateAutoConnectTimerState();
         }
 
         private void OnKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
@@ -215,8 +243,15 @@ namespace RCCarController
         private void SetupTransmitTimer()
         {
             transmitTimer = new System.Timers.Timer();
-            transmitTimer.Interval = 30; // 20ms
+            transmitTimer.Interval = 20; // 20ms
             transmitTimer.Elapsed += TransmitTimer_Tick;
+        }
+
+        private void SetupAutoConnectTimer()
+        {
+            autoConnectTimer = new System.Timers.Timer(10000);
+            autoConnectTimer.AutoReset = true;
+            autoConnectTimer.Elapsed += AutoConnectTimer_Elapsed;
         }
 
         private void TransmitTimer_Tick(object? sender, ElapsedEventArgs e)
@@ -236,6 +271,24 @@ namespace RCCarController
                 serialManager.SendCommand(effectiveSteering, effectiveThrottle);
                 UpdateLatestMessageLabel(serialManager.LatestMessage);
             }
+        }
+
+        private void AutoConnectTimer_Elapsed(object? sender, ElapsedEventArgs e)
+        {
+            if (!autoConnectSerial || serialManager.IsConnected || connectInProgress)
+            {
+                return;
+            }
+
+            Dispatcher.UIThread.InvokeAsync(async () =>
+            {
+                if (!autoConnectSerial || serialManager.IsConnected)
+                {
+                    return;
+                }
+
+                await Connect(showErrors: false);
+            });
         }
 
         private void SteeringNumeric_ValueChanged(object? sender, Avalonia.Controls.NumericUpDownValueChangedEventArgs e)
@@ -310,6 +363,13 @@ namespace RCCarController
             settingsManager.SaveSettings(reverseThrottle: reverseThrottleInput);
         }
 
+        private void AutoConnectToggle_IsCheckedChanged(object? sender, RoutedEventArgs e)
+        {
+            autoConnectSerial = (sender as CheckBox)?.IsChecked ?? false;
+            settingsManager.SaveSettings(autoConnectSerial: autoConnectSerial);
+            UpdateAutoConnectTimerState();
+        }
+
         private void UpdateSteeringOffsetLabel()
         {
             Dispatcher.UIThread.InvokeAsync(() =>
@@ -377,6 +437,167 @@ namespace RCCarController
             }
         }
 
+        private void UpdateAutoConnectTimerState()
+        {
+            if (autoConnectTimer == null)
+            {
+                return;
+            }
+
+            autoConnectTimer.Stop();
+            if (!autoConnectSerial)
+            {
+                return;
+            }
+
+            autoConnectTimer.Start();
+            if (!serialManager.IsConnected && !connectInProgress)
+            {
+                Dispatcher.UIThread.InvokeAsync(async () =>
+                {
+                    if (!autoConnectSerial || serialManager.IsConnected)
+                    {
+                        return;
+                    }
+
+                    await Connect(showErrors: false);
+                });
+            }
+        }
+
+        private void SendMacListButton_Click(object? sender, RoutedEventArgs e)
+        {
+            SendMacListToGround(userTriggered: true);
+        }
+
+        private void RequestActiveMacButton_Click(object? sender, RoutedEventArgs e)
+        {
+            RequestActiveMacFromGround(logIfDisconnected: true);
+        }
+
+        private void MacListTextBox_LostFocus(object? sender, RoutedEventArgs e)
+        {
+            UpdateMacListFromTextBox();
+        }
+
+        private void UpdateMacListTextBox()
+        {
+            if (macListTextBox != null)
+            {
+                macListTextBox.Text = string.Join(Environment.NewLine, macAddresses);
+            }
+        }
+
+        private void UpdateMacListFromTextBox()
+        {
+            var parsed = ParseMacAddressesFromText();
+            if (!parsed.SequenceEqual(macAddresses))
+            {
+                macAddresses.Clear();
+                macAddresses.AddRange(parsed);
+                settingsManager.SaveMacList(macAddresses);
+            }
+        }
+
+        private List<string> ParseMacAddressesFromText()
+        {
+            var source = macListTextBox?.Text ?? string.Empty;
+            var separators = new[] { '\r', '\n', ',', ';', ' ' };
+            return source
+                .Split(separators, StringSplitOptions.RemoveEmptyEntries)
+                .Select(token => token.Trim().ToUpperInvariant())
+                .Where(IsValidMac)
+                .Distinct()
+                .Take(MaxMacEntries)
+                .ToList();
+        }
+
+        private static bool IsValidMac(string mac)
+        {
+            if (string.IsNullOrWhiteSpace(mac))
+                return false;
+
+            var clean = new string(mac.Where(char.IsLetterOrDigit).ToArray());
+            if (clean.Length != 12)
+                return false;
+
+            foreach (var c in clean)
+            {
+                if (!((c >= '0' && c <= '9') || (char.ToUpperInvariant(c) >= 'A' && char.ToUpperInvariant(c) <= 'F')))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private void SendMacListToGround(bool userTriggered = false)
+        {
+            UpdateMacListFromTextBox();
+
+            if (macAddresses.Count == 0)
+            {
+                if (userTriggered)
+                {
+                    LogMessage("No MAC addresses to send.");
+                }
+                return;
+            }
+
+            if (!serialManager.IsConnected)
+            {
+                if (userTriggered)
+                {
+                    LogMessage("Connect to a ground station before sending the MAC list.");
+                }
+                return;
+            }
+
+            serialManager.SendMacList(macAddresses);
+            LogMessage($"Sent {macAddresses.Count} MAC address(es) to ground station.");
+            RequestActiveMacFromGround();
+        }
+
+        private void RequestActiveMacFromGround(bool logIfDisconnected = false)
+        {
+            if (serialManager.IsConnected)
+            {
+                serialManager.RequestActiveMac();
+            }
+            else if (logIfDisconnected)
+            {
+                LogMessage("Ground station not connected; cannot refresh active MAC.");
+            }
+        }
+
+        private void HandleActiveMacMessage(string data)
+        {
+            var parts = data.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 4)
+                return;
+
+            if (!int.TryParse(parts[1], out var index))
+                return;
+            var mac = parts[2];
+            var total = 0;
+            _ = int.TryParse(parts[3], out total);
+            UpdateActiveMacLabel(index, mac, total);
+        }
+
+        private void UpdateActiveMacLabel(int index, string mac, int total)
+        {
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (activeMacDisplayLabel != null)
+                {
+                    var humanIndex = (total <= 0) ? 0 : index + 1;
+                    activeMacDisplayLabel.Text = total > 0
+                        ? $"Active MAC [{humanIndex}/{total}]: {mac}"
+                        : "Active MAC: (none)";
+                }
+            });
+        }
+
         private void WebSocketInputManager_StatusChanged(string status)
         {
             UpdateWebSocketStatus(status);
@@ -419,6 +640,22 @@ namespace RCCarController
 
         private void SerialManager_DataReceived(string data)
         {
+            if (string.IsNullOrWhiteSpace(data))
+                return;
+
+            if (data.StartsWith("MACACTIVE", StringComparison.OrdinalIgnoreCase))
+            {
+                HandleActiveMacMessage(data);
+                return;
+            }
+
+            if (data.StartsWith("MACLIST-ACK", StringComparison.OrdinalIgnoreCase) ||
+                data.StartsWith("RX:", StringComparison.OrdinalIgnoreCase))
+            {
+                LogMessage(data);
+                return;
+            }
+
             UpdateLatestAckLabel(data);
             LogMessage($"Received: {data}");
         }
@@ -484,21 +721,31 @@ namespace RCCarController
             }
         }
 
-        private async Task Connect()
+        private async Task Connect(bool showErrors = true)
         {
             var portComboBox = this.FindControl<ComboBox>("PortComboBox");
             var baudComboBox = this.FindControl<ComboBox>("BaudComboBox");
             var connectButton = this.FindControl<Button>("ConnectButton");
             var statusLabel = this.FindControl<TextBlock>("StatusLabel");
 
-            if (portComboBox == null || baudComboBox == null || connectButton == null || statusLabel == null)
+            if (connectInProgress || portComboBox == null || baudComboBox == null || connectButton == null || statusLabel == null)
+            {
                 return;
+            }
 
+            connectInProgress = true;
             try
             {
                 if (portComboBox.SelectedItem == null)
                 {
-                    await ShowMessage("Please select a serial port", "Error");
+                    if (showErrors)
+                    {
+                        await ShowMessage("Please select a serial port", "Error");
+                    }
+                    else
+                    {
+                        LogMessage("Auto-connect skipped: no serial port selected.");
+                    }
                     return;
                 }
 
@@ -516,16 +763,32 @@ namespace RCCarController
 
                     LogMessage($"Connected to {portName} at {baudRateStr} baud");
                     settingsManager.SaveSettings(portName, baudComboBox.SelectedItem);
+                    SendMacListToGround();
+                    RequestActiveMacFromGround();
                 }
                 else
                 {
-                    await ShowMessage("Failed to connect", "Error");
+                    if (showErrors)
+                    {
+                        await ShowMessage("Failed to connect", "Error");
+                    }
+                    else
+                    {
+                        LogMessage($"Auto-connect failed for {portName} at {baudRateStr} baud.");
+                    }
                 }
             }
             catch (Exception ex)
             {
                 LogMessage("Connection error: " + ex.Message);
-                await ShowMessage("Failed to connect: " + ex.Message, "Error");
+                if (showErrors)
+                {
+                    await ShowMessage("Failed to connect: " + ex.Message, "Error");
+                }
+            }
+            finally
+            {
+                connectInProgress = false;
             }
         }
 
@@ -546,6 +809,7 @@ namespace RCCarController
 
             UpdateLatestMessageLabel(serialManager.LatestMessage);
             UpdateLatestAckLabel("(waiting)");
+            UpdateActiveMacLabel(-1, "(none)", 0);
 
             LogMessage("Disconnected");
         }
@@ -565,25 +829,25 @@ namespace RCCarController
 
         private void LogMessage(string message)
         {
-            Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                var logTextBox = this.FindControl<TextBox>("LogTextBox");
-                if (logTextBox != null)
-                {
-                    string timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
-                    logTextBox.Text += $"[{timestamp}] {message}\n";
+            // Dispatcher.UIThread.InvokeAsync(() =>
+            // {
+            //     var logTextBox = this.FindControl<TextBox>("LogTextBox");
+            //     if (logTextBox != null)
+            //     {
+            //         string timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
+            //         logTextBox.Text += $"[{timestamp}] {message}\n";
 
-                    // Auto scroll to bottom
-                    logTextBox.CaretIndex = logTextBox.Text.Length;
+            //         // Auto scroll to bottom
+            //         logTextBox.CaretIndex = logTextBox.Text.Length;
 
-                    // Limit log size
-                    var lines = logTextBox.Text.Split('\n');
-                    if (lines.Length > 1000)
-                    {
-                        logTextBox.Text = string.Join('\n', lines.Skip(500));
-                    }
-                }
-            });
+            //         // Limit log size
+            //         var lines = logTextBox.Text.Split('\n');
+            //         if (lines.Length > 1000)
+            //         {
+            //             logTextBox.Text = string.Join('\n', lines.Skip(500));
+            //         }
+            //     }
+            // });
         }
 
         private int ApplySteeringDirection(int value)
@@ -604,6 +868,8 @@ namespace RCCarController
                 gameControllerManager.Dispose();
             }
             webSocketInputManager.Dispose();
+            autoConnectTimer?.Stop();
+            autoConnectTimer?.Dispose();
             base.OnClosing(e);
         }
     }

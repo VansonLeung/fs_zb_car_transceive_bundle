@@ -1,13 +1,12 @@
 #include <ESP8266WiFi.h>
-extern "C" {
 #include <espnow.h>
-}
 #include <Servo.h>
 #include <cstring>
 
 // Pin definitions
 constexpr uint8_t SERVO_PIN = D1;  // Steering servo
 constexpr uint8_t ESC_PIN = D2;     // ESC / throttle output
+constexpr uint8_t STATUS_LED_PIN = LED_BUILTIN;
 
 // Control parameters
 constexpr int DEFAULT_STEERING = 90;
@@ -56,8 +55,13 @@ void setup() {
   steeringServo.write(DEFAULT_STEERING);
   escMotor.write(DEFAULT_THROTTLE);
 
+  pinMode(STATUS_LED_PIN, OUTPUT);
+  digitalWrite(STATUS_LED_PIN, HIGH);
+
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
+  Serial.print("Local MAC: ");
+  Serial.println(WiFi.macAddress());
 
   if (esp_now_init() != 0) {
     Serial.println("ESP-NOW init failed, restarting...");
@@ -119,6 +123,8 @@ void onDataRecv(uint8_t* mac, uint8_t* incomingData, uint8_t len) {
   targetDirty = true;
   lastPacketMillis = millis();
   interrupts();
+
+  digitalWrite(STATUS_LED_PIN, LOW);
 }
 
 int applySlew(int currentValue, int desiredValue, int maxStep) {
@@ -138,11 +144,19 @@ void applyTargets(int desiredSteering, int desiredThrottle) {
 
   steeringServo.write(currentSteeringValue);
   escMotor.write(currentThrottleValue);
+
+  // Serial.print(" S");
+  // Serial.print(desiredSteering);
+  // Serial.print(" T");
+  // Serial.println(desiredThrottle);
 }
 
 void engageFailsafe() {
-  failsafeEngaged = true;
-  Serial.println("Failsafe engaged - reverting to neutral");
+  if (!failsafeEngaged) {
+    failsafeEngaged = true;
+    // Serial.println("Failsafe engaged - reverting to neutral");
+  }
+  digitalWrite(STATUS_LED_PIN, HIGH);
   setTargetsSafely(DEFAULT_STEERING, DEFAULT_THROTTLE);
 }
 

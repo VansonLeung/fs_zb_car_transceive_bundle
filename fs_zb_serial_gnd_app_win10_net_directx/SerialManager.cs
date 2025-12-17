@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO.Ports;
+using System.Linq;
 using System.Timers;
 
 namespace RCCarController
@@ -34,6 +36,40 @@ namespace RCCarController
                     Disconnect();
                 }
             }
+        }
+
+        public void SendMacList(IEnumerable<string> macAddresses)
+        {
+            if (!isConnected || serialPort == null || macAddresses == null)
+                return;
+
+            var list = macAddresses
+                .Select(m => m?.Trim())
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .Select(m => m!.ToUpperInvariant())
+                .ToList();
+
+            if (list.Count == 0)
+                return;
+
+            string payload = string.Join(' ', list);
+            serialPort.Write($"MACLIST {payload}\n");
+        }
+
+        public void RequestActiveMac()
+        {
+            if (!isConnected || serialPort == null)
+                return;
+
+            serialPort.Write("MACACTIVE?\n");
+        }
+
+        public void SendMacSelect(int index)
+        {
+            if (!isConnected || serialPort == null)
+                return;
+
+            serialPort.Write($"MACSELECT {index}\n");
         }
 
         public string LatestMessage { get; private set; } = "";
