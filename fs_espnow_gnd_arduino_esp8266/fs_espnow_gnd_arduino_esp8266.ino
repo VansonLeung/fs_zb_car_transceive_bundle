@@ -17,7 +17,7 @@ extern "C" {
 // manages a configurable MAC list with persistence + OLED feedback.
 
 constexpr uint32_t SERIAL_BAUD = 115200;
-constexpr size_t SERIAL_BUFFER_SIZE = 128;
+constexpr size_t SERIAL_BUFFER_SIZE = 512;
 
 constexpr int STEERING_MIN = 5;
 constexpr int STEERING_MAX = 175;
