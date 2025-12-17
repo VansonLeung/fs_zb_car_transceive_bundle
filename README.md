@@ -28,6 +28,10 @@ This repository contains a collection of Arduino sketches and a .NET application
 cd /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_zb_serial_gnd_app_win10_net_directx && dotnet publish -c Release -r win-x64 --self-contained true
 ```
 
+```
+dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
+```
+
 
 ## Setup
 
