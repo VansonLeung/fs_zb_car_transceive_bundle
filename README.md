@@ -22,6 +22,13 @@ This repository contains a collection of Arduino sketches and a .NET application
 - Keyboard controls (WASD)
 - Real-time UI updates
 
+## Build for Windows
+
+```
+cd /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_zb_serial_gnd_app_win10_net_directx && dotnet publish -c Release -r win-x64 --self-contained true
+```
+
+
 ## Setup
 
 1. Upload the appropriate Arduino sketch to your ESP board
