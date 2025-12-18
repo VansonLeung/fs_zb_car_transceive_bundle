@@ -15,6 +15,7 @@ namespace RCCarController
         public bool ReverseSteeringInput { get; private set; }
         public bool ReverseThrottleInput { get; private set; }
         public bool AutoConnectSerial { get; private set; }
+        public int SteeringOffset { get; private set; }
         public List<string> MacAddresses { get; } = new();
 
         public void LoadSettings(ComboBox baudComboBox)
@@ -25,6 +26,7 @@ namespace RCCarController
                 ReverseSteeringInput = false;
                 ReverseThrottleInput = false;
                 AutoConnectSerial = false;
+                SteeringOffset = 0;
                 MacAddresses.Clear();
 
                 if (File.Exists(SETTINGS_FILE))
@@ -78,6 +80,12 @@ namespace RCCarController
                                         AutoConnectSerial = autoConnect;
                                     }
                                     break;
+                                case "SteeringOffset":
+                                    if (int.TryParse(parts[1], out var offset))
+                                    {
+                                        SteeringOffset = offset;
+                                    }
+                                    break;
                                 case "MacList":
                                     var entries = parts[1]
                                         .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -107,7 +115,8 @@ namespace RCCarController
             bool? websocketEnabled = null,
             bool? reverseSteering = null,
             bool? reverseThrottle = null,
-            bool? autoConnectSerial = null)
+            bool? autoConnectSerial = null,
+            int? steeringOffset = null)
         {
             try
             {
@@ -127,6 +136,8 @@ namespace RCCarController
                     ReverseThrottleInput = reverseThrottle.Value;
                 if (autoConnectSerial.HasValue)
                     AutoConnectSerial = autoConnectSerial.Value;
+                if (steeringOffset.HasValue)
+                    SteeringOffset = steeringOffset.Value;
 
                 WriteSettingsFile();
             }
@@ -167,6 +178,7 @@ namespace RCCarController
             settings.Add($"ReverseSteering={ReverseSteeringInput}");
             settings.Add($"ReverseThrottle={ReverseThrottleInput}");
             settings.Add($"AutoConnectSerial={AutoConnectSerial}");
+            settings.Add($"SteeringOffset={SteeringOffset}");
             if (MacAddresses.Count > 0)
             {
                 settings.Add($"MacList={string.Join(';', MacAddresses)}");

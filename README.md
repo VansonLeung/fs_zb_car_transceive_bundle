@@ -25,11 +25,28 @@ This repository contains a collection of Arduino sketches and a .NET application
 ## Build for Windows
 
 ```
-cd /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_zb_serial_gnd_app_win10_net_directx && dotnet publish -c Release -r win-x64 --self-contained true
-```
+cd /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_zb_serial_gnd_app_win10_net_directx && dotnet publish -c Release -r win-x64 --self-contained true /p:GenerateFullPaths=true /p:PublishSingleFile=true -o /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_output/win-x64/rc_gnd
+
+cd /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_zb_serial_gnd_app_win10_net_webapp_gui && dotnet publish -c Release -r win-x64 --self-contained true /p:GenerateFullPaths=true /p:PublishSingleFile=true -o /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_output/win-x64/rc_gui
+
+cd /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_zb_serial_gnd_app_win10_net_webapp_gui_launcher && dotnet publish -c Release -r win-x64 --self-contained true /p:GenerateFullPaths=true /p:PublishSingleFile=true -o /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_output/win-x64/rc_gui_launcher
+
+cd /Users/van/Documents/projects/fs/VanHIDDevices/HIDDeviceMonitor && dotnet publish HIDDeviceMonitor.csproj -c Release -r win-x64 --self-contained true /p:GenerateFullPaths=true /p:PublishSingleFile=true -o /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_output/win-x64/rc_hid_monitor
+
+After publishing, you can start all Windows apps with: `fs_output/run-win-x64.cmd` (launches HID Monitor, Ground app, Web GUI, then GUI Launcher with 5s gaps).
 
 ```
-dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
+
+### macOS
+
+```
+cd /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_zb_serial_gnd_app_win10_net_directx && dotnet publish -c Release -r osx-arm64 --self-contained true /p:GenerateFullPaths=true /p:PublishSingleFile=true -o /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_output/osx-arm64/rc_gnd
+
+cd /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_zb_serial_gnd_app_win10_net_webapp_gui && dotnet publish -c Release -r osx-arm64 --self-contained true /p:GenerateFullPaths=true /p:PublishSingleFile=true -o /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_output/osx-arm64/rc_gui
+
+cd /Users/van/Documents/projects/fs/VanHIDDevices/HIDDeviceMonitor && dotnet publish HIDDeviceMonitor.csproj -c Release -r osx-arm64 --self-contained true /p:GenerateFullPaths=true /p:PublishSingleFile=true -o /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_output/osx-arm64/rc_hid_monitor
+
+After publishing, you can start all macOS apps with: `chmod +x fs_output/run-osx-arm64.sh && fs_output/run-osx-arm64.sh` (opens each app with 5s gaps).
 ```
 
 

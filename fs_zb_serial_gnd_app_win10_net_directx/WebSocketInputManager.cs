@@ -68,10 +68,10 @@ public class WebSocketInputManager : IDisposable
         {
             try
             {
-                StatusChanged?.Invoke("Connecting...");
+                StatusChanged?.Invoke("...");
                 client = new ClientWebSocket();
                 await client.ConnectAsync(new Uri(WebSocketUrl), token);
-                StatusChanged?.Invoke("Connected");
+                StatusChanged?.Invoke("ENGINE: ON");
 
                 await ReceiveLoopAsync(client, token);
             }

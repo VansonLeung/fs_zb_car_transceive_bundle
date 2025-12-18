@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RC Car HUD</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="cameraTrigger" title="Tap to switch camera"></div>
+    <button id="fullscreenToggle" aria-label="Toggle Fullscreen"></button>
+    <video id="cameraFeed" autoplay playsinline muted></video>
+    <div class="hud-overlay">
+      <div class="hud-bottom-row">
+        <div class="hud-left">
+          <div id="connectionStatus" class="status">Connecting...</div>
+          <section class="telemetry" style="display: none;">
+            <div class="telemetry-item">
+              <span class="telemetry-label">Steering</span>
+              <span id="steeringValue" class="telemetry-value">0°</span>
+            </div>
+            <div class="telemetry-item">
+              <span class="telemetry-label">Throttle Raw</span>
+              <span id="rawThrottleValue" class="telemetry-value">0</span>
+            </div>
+            <div class="telemetry-item">
+              <span class="telemetry-label">Brake Raw</span>
+              <span id="rawBrakeValue" class="telemetry-value">0</span>
+            </div>
+          </section>
+        </div>
+
+        <div class="hud-right">
+          <div class="cluster">
+            <div class="input-meter">
+              <div class="input-bar-bg">
+                <div class="input-bar-fill brake" id="brakeBar"></div>
+              </div>
+              <div class="label">BRK</div>
+            </div>
+            <div class="input-meter">
+              <div class="input-bar-bg">
+                <div class="input-bar-fill" id="throttleBar"></div>
+              </div>
+              <div class="label">THR</div>
+            </div>
+            <div class="gauge-container" id="speedGauge">
+              <div class="gauge-ring">
+                <div class="needle"></div>
+              </div>
+              <div class="gauge-center">
+                <div class="value" id="speedValue">0</div>
+                <div class="unit">km/h</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="app.js" type="module"></script>
+  </body>
+</html>

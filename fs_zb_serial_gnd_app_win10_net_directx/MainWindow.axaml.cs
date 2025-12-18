@@ -125,6 +125,7 @@ namespace RCCarController
             reverseSteeringInput = settingsManager.ReverseSteeringInput;
             reverseThrottleInput = settingsManager.ReverseThrottleInput;
             autoConnectSerial = settingsManager.AutoConnectSerial;
+            steeringOffset = settingsManager.SteeringOffset;
             macAddresses.Clear();
             macAddresses.AddRange(settingsManager.MacAddresses);
 
@@ -132,6 +133,7 @@ namespace RCCarController
             if (reverseSteeringToggle != null) reverseSteeringToggle.IsChecked = reverseSteeringInput;
             if (reverseThrottleToggle != null) reverseThrottleToggle.IsChecked = reverseThrottleInput;
             if (autoConnectToggle != null) autoConnectToggle.IsChecked = autoConnectSerial;
+            if (steeringOffsetNumeric != null) steeringOffsetNumeric.Value = steeringOffset;
             UpdateMacListTextBox();
 
             // Now safe to refresh ports
@@ -386,6 +388,7 @@ namespace RCCarController
         {
             steeringOffset = (int)(e.NewValue ?? 0);
             UpdateSteeringOffsetLabel();
+            settingsManager.SaveSettings(steeringOffset: steeringOffset);
             UpdateSteeringUI();
         }
 
@@ -756,7 +759,7 @@ namespace RCCarController
                 if (success)
                 {
                     connectButton.Content = "Disconnect";
-                    statusLabel.Text = "Connected";
+                    statusLabel.Text = "ENGINE: ON";
                     statusLabel.Classes.Clear();
                     statusLabel.Classes.Add("green");
                     transmitTimer?.Start();
@@ -802,7 +805,7 @@ namespace RCCarController
             if (connectButton != null) connectButton.Content = "Connect";
             if (statusLabel != null)
             {
-                statusLabel.Text = "Disconnected";
+                statusLabel.Text = "ENGINE: OFF";
                 statusLabel.Classes.Clear();
                 statusLabel.Classes.Add("red");
             }
