@@ -26,9 +26,9 @@ constexpr int THROTTLE_MAX = 160;
 
 constexpr uint16_t CONTROL_MAGIC = 0xF5A5;
 
-constexpr size_t MAX_MACS = 8;
+constexpr uint8_t MAX_INDEX = 255;
 constexpr uint16_t EEPROM_MAGIC = 0xCAFE;
-constexpr size_t EEPROM_BYTES = 4 + (MAX_MACS * 6);
+constexpr size_t EEPROM_BYTES = 8; // magic (2) + start (1) + end (1) + active (1) + padding
 
 constexpr uint8_t BUTTON_PIN = D5;
 constexpr uint8_t I2C_SDA_PIN = D2;
@@ -48,37 +48,6 @@ struct ControlPacket {
 struct MacAddress {
   uint8_t bytes[6];
 
-  static bool fromString(const char* token, MacAddress& out) {
-    if (token == nullptr) return false;
-    char compact[13];
-    size_t idx = 0;
-    size_t len = strlen(token);
-    for (size_t i = 0; i < len && idx < sizeof(compact) - 1; ++i) {
-      if (isxdigit(token[i])) {
-        compact[idx++] = toupper(token[i]);
-      }
-    }
-    compact[idx] = '\0';
-    if (idx != 12) {
-      return false;
-    }
-    for (int i = 0; i < 6; ++i) {
-      int hi = hexDigit(compact[i * 2]);
-      int lo = hexDigit(compact[i * 2 + 1]);
-      if (hi < 0 || lo < 0) {
-        return false;
-      }
-      out.bytes[i] = static_cast<uint8_t>((hi << 4) | lo);
-    }
-    return true;
-  }
-
-  static int hexDigit(char c) {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
-  }
-
   void toString(char* dest, size_t len) const {
     if (len < 18) {
       if (len > 0) dest[0] = '\0';
@@ -91,9 +60,10 @@ struct MacAddress {
 
 struct EepromLayout {
   uint16_t magic;
-  uint8_t count;
+  uint8_t startIndex;
+  uint8_t endIndex;
   uint8_t activeIndex;
-  MacAddress entries[MAX_MACS];
+  uint8_t reserved;
 };
 
 class MacRegistry {
@@ -103,32 +73,29 @@ public:
     load();
   }
 
-  bool hasEntries() const { return count > 0; }
-  uint8_t getCount() const { return count; }
+  bool hasEntries() const { return startIndex <= endIndex; }
+  uint8_t getCount() const { return hasEntries() ? (endIndex - startIndex + 1) : 0; }
   uint8_t getActiveIndex() const { return activeIndex; }
 
-  const MacAddress* getActive() const {
-    if (!hasEntries() || activeIndex >= count) {
+  const MacAddress* getActive() {
+    if (!hasEntries() || activeIndex < startIndex || activeIndex > endIndex) {
       return nullptr;
     }
-    return &entries[activeIndex];
+    computeMac(activeIndex, activeMac);
+    return &activeMac;
   }
 
-  bool setList(const MacAddress* list, uint8_t newCount) {
-    if (list == nullptr || newCount == 0) return false;
-    if (newCount > MAX_MACS) newCount = MAX_MACS;
-
-    for (uint8_t i = 0; i < newCount; ++i) {
-      entries[i] = list[i];
-    }
-    count = newCount;
-    activeIndex = 0;
+  bool setRange(uint8_t start, uint8_t end) {
+    if (start > end || end > MAX_INDEX) return false;
+    startIndex = start;
+    endIndex = end;
+    activeIndex = startIndex;
     persist();
     return true;
   }
 
   bool setActive(uint8_t index) {
-    if (!hasEntries() || index >= count) return false;
+    if (!hasEntries() || index < startIndex || index > endIndex) return false;
     activeIndex = index;
     persist();
     return true;
@@ -136,50 +103,64 @@ public:
 
   bool advanceActive() {
     if (!hasEntries()) return false;
-    activeIndex = (activeIndex + 1) % count;
+    if (activeIndex >= endIndex) {
+      activeIndex = startIndex;
+    } else {
+      activeIndex++;
+    }
     persist();
     return true;
   }
 
-  void getMacString(uint8_t index, char* dest, size_t len) const {
-    if (index >= count || dest == nullptr) {
+  void getMacString(uint8_t index, char* dest, size_t len) {
+    if (!hasEntries() || index < startIndex || index > endIndex || dest == nullptr) {
       if (dest && len) dest[0] = '\0';
       return;
     }
-    entries[index].toString(dest, len);
+    MacAddress tmp;
+    computeMac(index, tmp);
+    tmp.toString(dest, len);
   }
 
+  uint8_t getStart() const { return startIndex; }
+  uint8_t getEnd() const { return endIndex; }
+
 private:
-  uint8_t count = 0;
+  uint8_t startIndex = 0;
+  uint8_t endIndex = 0;
   uint8_t activeIndex = 0;
-  MacAddress entries[MAX_MACS];
+  MacAddress activeMac{};
+
+  static void computeMac(uint8_t idx, MacAddress& out) {
+    out.bytes[0] = 0x66;
+    out.bytes[1] = 0x33;
+    out.bytes[2] = 0x9F;
+    out.bytes[3] = 0x00;
+    out.bytes[4] = 0x00;
+    out.bytes[5] = idx;
+  }
 
   void load() {
     EepromLayout layout;
     EEPROM.get(0, layout);
-    if (layout.magic != EEPROM_MAGIC || layout.count == 0 || layout.count > MAX_MACS) {
-      count = 0;
+    if (layout.magic != EEPROM_MAGIC || layout.startIndex > layout.endIndex) {
+      startIndex = 0;
+      endIndex = 0;
       activeIndex = 0;
       return;
     }
-    count = layout.count;
-    activeIndex = layout.activeIndex < count ? layout.activeIndex : 0;
-    for (uint8_t i = 0; i < count; ++i) {
-      entries[i] = layout.entries[i];
-    }
+    startIndex = layout.startIndex;
+    endIndex = layout.endIndex;
+    activeIndex = (layout.activeIndex >= startIndex && layout.activeIndex <= endIndex) ? layout.activeIndex : startIndex;
   }
 
   void persist() {
     EepromLayout layout;
     layout.magic = EEPROM_MAGIC;
-    layout.count = count;
+    layout.startIndex = startIndex;
+    layout.endIndex = endIndex;
     layout.activeIndex = activeIndex;
-    for (uint8_t i = 0; i < count; ++i) {
-      layout.entries[i] = entries[i];
-    }
-    for (uint8_t i = count; i < MAX_MACS; ++i) {
-      memset(layout.entries[i].bytes, 0, sizeof(layout.entries[i].bytes));
-    }
+    layout.reserved = 0;
     EEPROM.put(0, layout);
     EEPROM.commit();
   }
@@ -425,28 +406,25 @@ private:
     char scratch[SERIAL_BUFFER_SIZE];
     strncpy(scratch, payload, sizeof(scratch));
     scratch[sizeof(scratch) - 1] = '\0';
-
-    MacAddress newList[MAX_MACS];
-    uint8_t count = 0;
     char* token = strtok(scratch, ",; \t");
-    while (token != nullptr && count < MAX_MACS) {
-      MacAddress mac;
-      if (MacAddress::fromString(token, mac)) {
-        newList[count++] = mac;
-      }
-      token = strtok(nullptr, ",; \t");
-    }
+    if (token == nullptr) { Serial.println(F("ERR:MACLIST needs start,end")); return; }
+    int start = atoi(token);
+    token = strtok(nullptr, ",; \t");
+    if (token == nullptr) { Serial.println(F("ERR:MACLIST needs end index")); return; }
+    int end = atoi(token);
 
-    if (count == 0) {
-      Serial.println(F("ERR:MACLIST parsed 0 entries"));
+    if (start < 0 || start > MAX_INDEX || end < 0 || end > MAX_INDEX || start > end) {
+      Serial.println(F("ERR:MACLIST index range invalid"));
       return;
     }
 
-    if (macRegistry.setList(newList, count)) {
+    if (macRegistry.setRange((uint8_t)start, (uint8_t)end)) {
       espNow.ensurePeer(macRegistry.getActive());
       notifyActiveMac();
-      Serial.print(F("MACLIST-ACK "));
-      Serial.println(count);
+      Serial.print(F("MACRANGE-ACK "));
+      Serial.print(start);
+      Serial.print('-');
+      Serial.println(end);
     }
   }
 

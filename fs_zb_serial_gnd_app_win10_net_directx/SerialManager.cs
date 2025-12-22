@@ -1,8 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.IO.Ports;
-using System.Linq;
-using System.Timers;
 
 namespace RCCarController
 {
@@ -38,22 +35,18 @@ namespace RCCarController
             }
         }
 
-        public void SendMacList(IEnumerable<string> macAddresses)
+        public void SendMacRange(int startIndex, int endIndex)
         {
-            if (!isConnected || serialPort == null || macAddresses == null)
+            if (!isConnected || serialPort == null)
                 return;
 
-            var list = macAddresses
-                .Select(m => m?.Trim())
-                .Where(m => !string.IsNullOrWhiteSpace(m))
-                .Select(m => m!.ToUpperInvariant())
-                .ToList();
+            startIndex = Math.Clamp(startIndex, 0, 255);
+            endIndex = Math.Clamp(endIndex, 0, 255);
 
-            if (list.Count == 0)
+            if (startIndex > endIndex)
                 return;
 
-            string payload = string.Join(' ', list);
-            serialPort.Write($"MACLIST {payload}\n");
+            serialPort.Write($"MACLIST {startIndex} {endIndex}\n");
         }
 
         public void RequestActiveMac()

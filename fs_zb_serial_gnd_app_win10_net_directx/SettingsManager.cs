@@ -1,6 +1,5 @@
-using System.IO;
 using System.Collections.Generic;
-using System.Linq;
+using System.IO;
 using Avalonia.Controls;
 
 namespace RCCarController
@@ -16,7 +15,8 @@ namespace RCCarController
         public bool ReverseThrottleInput { get; private set; }
         public bool AutoConnectSerial { get; private set; }
         public int SteeringOffset { get; private set; }
-        public List<string> MacAddresses { get; } = new();
+        public int StartIndex { get; private set; }
+        public int EndIndex { get; private set; }
 
         public void LoadSettings(ComboBox baudComboBox)
         {
@@ -27,7 +27,9 @@ namespace RCCarController
                 ReverseThrottleInput = false;
                 AutoConnectSerial = false;
                 SteeringOffset = 0;
-                MacAddresses.Clear();
+                StartIndex = 0;
+                EndIndex = 0;
+                
 
                 if (File.Exists(SETTINGS_FILE))
                 {
@@ -86,16 +88,16 @@ namespace RCCarController
                                         SteeringOffset = offset;
                                     }
                                     break;
-                                case "MacList":
-                                    var entries = parts[1]
-                                        .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                                        .Select(m => m.Trim().ToUpperInvariant())
-                                        .Where(m => !string.IsNullOrWhiteSpace(m))
-                                        .ToList();
-                                    if (entries.Count > 0)
+                                case "StartIndex":
+                                    if (int.TryParse(parts[1], out var sIdx))
                                     {
-                                        MacAddresses.Clear();
-                                        MacAddresses.AddRange(entries);
+                                        StartIndex = sIdx;
+                                    }
+                                    break;
+                                case "EndIndex":
+                                    if (int.TryParse(parts[1], out var eIdx))
+                                    {
+                                        EndIndex = eIdx;
                                     }
                                     break;
                             }
@@ -116,7 +118,9 @@ namespace RCCarController
             bool? reverseSteering = null,
             bool? reverseThrottle = null,
             bool? autoConnectSerial = null,
-            int? steeringOffset = null)
+            int? steeringOffset = null,
+            int? startIndex = null,
+            int? endIndex = null)
         {
             try
             {
@@ -138,27 +142,11 @@ namespace RCCarController
                     AutoConnectSerial = autoConnectSerial.Value;
                 if (steeringOffset.HasValue)
                     SteeringOffset = steeringOffset.Value;
+                if (startIndex.HasValue)
+                    StartIndex = startIndex.Value;
+                if (endIndex.HasValue)
+                    EndIndex = endIndex.Value;
 
-                WriteSettingsFile();
-            }
-            catch (Exception)
-            {
-                // Handle error
-            }
-        }
-
-        public void SaveMacList(IEnumerable<string> macs)
-        {
-            try
-            {
-                MacAddresses.Clear();
-                foreach (var mac in macs)
-                {
-                    if (!string.IsNullOrWhiteSpace(mac))
-                    {
-                        MacAddresses.Add(mac.Trim().ToUpperInvariant());
-                    }
-                }
                 WriteSettingsFile();
             }
             catch (Exception)
@@ -179,10 +167,8 @@ namespace RCCarController
             settings.Add($"ReverseThrottle={ReverseThrottleInput}");
             settings.Add($"AutoConnectSerial={AutoConnectSerial}");
             settings.Add($"SteeringOffset={SteeringOffset}");
-            if (MacAddresses.Count > 0)
-            {
-                settings.Add($"MacList={string.Join(';', MacAddresses)}");
-            }
+            settings.Add($"StartIndex={StartIndex}");
+            settings.Add($"EndIndex={EndIndex}");
 
             File.WriteAllLines(SETTINGS_FILE, settings);
         }

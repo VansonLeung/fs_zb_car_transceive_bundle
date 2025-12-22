@@ -35,12 +35,13 @@ namespace RCCarController
         private bool isUpdatingFromWebSocket = false;
         private bool autoConnectSerial = false;
         private bool connectInProgress = false;
-        private TextBox? macListTextBox;
+        private NumericUpDown? startIndexNumeric;
+        private NumericUpDown? endIndexNumeric;
+        private NumericUpDown? activeIndexNumeric;
         private TextBlock? activeMacDisplayLabel;
-        private Button? sendMacListButton;
+        private Button? applyRangeButton;
+        private Button? setActiveButton;
         private Button? requestActiveMacButton;
-        private readonly List<string> macAddresses = new();
-        private const int MaxMacEntries = 8;
 
         // Transmit Timer
         private System.Timers.Timer? transmitTimer;
@@ -88,9 +89,12 @@ namespace RCCarController
             var reverseSteeringToggle = this.FindControl<CheckBox>("ReverseSteeringToggle");
             var reverseThrottleToggle = this.FindControl<CheckBox>("ReverseThrottleToggle");
             var autoConnectToggle = this.FindControl<CheckBox>("AutoConnectToggle");
-            macListTextBox = this.FindControl<TextBox>("MacListTextBox");
+            startIndexNumeric = this.FindControl<NumericUpDown>("StartIndexNumeric");
+            endIndexNumeric = this.FindControl<NumericUpDown>("EndIndexNumeric");
+            activeIndexNumeric = this.FindControl<NumericUpDown>("ActiveIndexNumeric");
             activeMacDisplayLabel = this.FindControl<TextBlock>("ActiveMacDisplayLabel");
-            sendMacListButton = this.FindControl<Button>("SendMacListButton");
+            applyRangeButton = this.FindControl<Button>("ApplyRangeButton");
+            setActiveButton = this.FindControl<Button>("SetActiveButton");
             requestActiveMacButton = this.FindControl<Button>("RequestActiveMacButton");
 
             // Wire up events
@@ -106,9 +110,9 @@ namespace RCCarController
             if (reverseSteeringToggle != null) reverseSteeringToggle.IsCheckedChanged += ReverseSteeringToggle_IsCheckedChanged;
             if (reverseThrottleToggle != null) reverseThrottleToggle.IsCheckedChanged += ReverseThrottleToggle_IsCheckedChanged;
             if (autoConnectToggle != null) autoConnectToggle.IsCheckedChanged += AutoConnectToggle_IsCheckedChanged;
-            if (sendMacListButton != null) sendMacListButton.Click += SendMacListButton_Click;
+            if (applyRangeButton != null) applyRangeButton.Click += ApplyRangeButton_Click;
+            if (setActiveButton != null) setActiveButton.Click += SetActiveButton_Click;
             if (requestActiveMacButton != null) requestActiveMacButton.Click += RequestActiveMacButton_Click;
-            if (macListTextBox != null) macListTextBox.LostFocus += MacListTextBox_LostFocus;
 
             // Key handling
             this.KeyDown += OnKeyDown;
@@ -126,15 +130,19 @@ namespace RCCarController
             reverseThrottleInput = settingsManager.ReverseThrottleInput;
             autoConnectSerial = settingsManager.AutoConnectSerial;
             steeringOffset = settingsManager.SteeringOffset;
-            macAddresses.Clear();
-            macAddresses.AddRange(settingsManager.MacAddresses);
+            if (startIndexNumeric != null) startIndexNumeric.Value = settingsManager.StartIndex;
+            if (endIndexNumeric != null) endIndexNumeric.Value = settingsManager.EndIndex;
+            if (activeIndexNumeric != null)
+            {
+                var candidate = settingsManager.StartIndex <= settingsManager.EndIndex ? settingsManager.StartIndex : 0;
+                activeIndexNumeric.Value = candidate;
+            }
 
             if (webSocketToggle != null) webSocketToggle.IsChecked = webSocketClientEnabled;
             if (reverseSteeringToggle != null) reverseSteeringToggle.IsChecked = reverseSteeringInput;
             if (reverseThrottleToggle != null) reverseThrottleToggle.IsChecked = reverseThrottleInput;
             if (autoConnectToggle != null) autoConnectToggle.IsChecked = autoConnectSerial;
             if (steeringOffsetNumeric != null) steeringOffsetNumeric.Value = steeringOffset;
-            UpdateMacListTextBox();
 
             // Now safe to refresh ports
             RefreshPorts();
@@ -468,9 +476,14 @@ namespace RCCarController
             }
         }
 
-        private void SendMacListButton_Click(object? sender, RoutedEventArgs e)
+        private void ApplyRangeButton_Click(object? sender, RoutedEventArgs e)
         {
-            SendMacListToGround(userTriggered: true);
+            ApplyRangeToGround(userTriggered: true);
+        }
+
+        private void SetActiveButton_Click(object? sender, RoutedEventArgs e)
+        {
+            SetActiveIndexOnGround(userTriggered: true);
         }
 
         private void RequestActiveMacButton_Click(object? sender, RoutedEventArgs e)
@@ -478,86 +491,81 @@ namespace RCCarController
             RequestActiveMacFromGround(logIfDisconnected: true);
         }
 
-        private void MacListTextBox_LostFocus(object? sender, RoutedEventArgs e)
+        private bool TryGetRange(out int start, out int end)
         {
-            UpdateMacListFromTextBox();
+            start = (int)(startIndexNumeric?.Value ?? 0);
+            end = (int)(endIndexNumeric?.Value ?? 0);
+            if (start < 0) start = 0;
+            if (end < 0) end = 0;
+            return start <= end && end <= 255;
         }
 
-        private void UpdateMacListTextBox()
+        private int GetActiveIndex()
         {
-            if (macListTextBox != null)
-            {
-                macListTextBox.Text = string.Join(Environment.NewLine, macAddresses);
-            }
+            var idx = (int)(activeIndexNumeric?.Value ?? 0);
+            if (idx < 0) idx = 0;
+            if (idx > 255) idx = 255;
+            return idx;
         }
 
-        private void UpdateMacListFromTextBox()
+        private void ApplyRangeToGround(bool userTriggered = false)
         {
-            var parsed = ParseMacAddressesFromText();
-            if (!parsed.SequenceEqual(macAddresses))
-            {
-                macAddresses.Clear();
-                macAddresses.AddRange(parsed);
-                settingsManager.SaveMacList(macAddresses);
-            }
-        }
-
-        private List<string> ParseMacAddressesFromText()
-        {
-            var source = macListTextBox?.Text ?? string.Empty;
-            var separators = new[] { '\r', '\n', ',', ';', ' ' };
-            return source
-                .Split(separators, StringSplitOptions.RemoveEmptyEntries)
-                .Select(token => token.Trim().ToUpperInvariant())
-                .Where(IsValidMac)
-                .Distinct()
-                .Take(MaxMacEntries)
-                .ToList();
-        }
-
-        private static bool IsValidMac(string mac)
-        {
-            if (string.IsNullOrWhiteSpace(mac))
-                return false;
-
-            var clean = new string(mac.Where(char.IsLetterOrDigit).ToArray());
-            if (clean.Length != 12)
-                return false;
-
-            foreach (var c in clean)
-            {
-                if (!((c >= '0' && c <= '9') || (char.ToUpperInvariant(c) >= 'A' && char.ToUpperInvariant(c) <= 'F')))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        private void SendMacListToGround(bool userTriggered = false)
-        {
-            UpdateMacListFromTextBox();
-
-            if (macAddresses.Count == 0)
+            if (!TryGetRange(out var start, out var end))
             {
                 if (userTriggered)
                 {
-                    LogMessage("No MAC addresses to send.");
+                    LogMessage("Invalid range. Ensure start <= end and both within 0-255.");
                 }
                 return;
             }
+
+            settingsManager.SaveSettings(startIndex: start, endIndex: end);
 
             if (!serialManager.IsConnected)
             {
                 if (userTriggered)
                 {
-                    LogMessage("Connect to a ground station before sending the MAC list.");
+                    LogMessage("Connect to a ground station before applying the range.");
                 }
                 return;
             }
 
-            serialManager.SendMacList(macAddresses);
-            LogMessage($"Sent {macAddresses.Count} MAC address(es) to ground station.");
+            serialManager.SendMacRange(start, end);
+            LogMessage($"Sent MAC index range {start}-{end} to ground station.");
+            RequestActiveMacFromGround();
+        }
+
+        private void SetActiveIndexOnGround(bool userTriggered = false)
+        {
+            if (!TryGetRange(out var start, out var end))
+            {
+                if (userTriggered)
+                {
+                    LogMessage("Set a valid range before selecting an active index.");
+                }
+                return;
+            }
+
+            var index = GetActiveIndex();
+            if (index < start || index > end)
+            {
+                LogMessage($"Active index must be within {start}-{end}.");
+                return;
+            }
+
+            settingsManager.SaveSettings(startIndex: start, endIndex: end);
+
+            if (!serialManager.IsConnected)
+            {
+                if (userTriggered)
+                {
+                    LogMessage("Connect to a ground station before selecting an active index.");
+                }
+                return;
+            }
+
+            serialManager.SendMacSelect(index);
+            LogMessage($"Requested active index {index}.");
             RequestActiveMacFromGround();
         }
 
@@ -652,7 +660,7 @@ namespace RCCarController
                 return;
             }
 
-            if (data.StartsWith("MACLIST-ACK", StringComparison.OrdinalIgnoreCase) ||
+            if (data.StartsWith("MACRANGE-ACK", StringComparison.OrdinalIgnoreCase) ||
                 data.StartsWith("RX:", StringComparison.OrdinalIgnoreCase))
             {
                 LogMessage(data);
@@ -766,7 +774,8 @@ namespace RCCarController
 
                     LogMessage($"Connected to {portName} at {baudRateStr} baud");
                     settingsManager.SaveSettings(portName, baudComboBox.SelectedItem);
-                    SendMacListToGround();
+                    ApplyRangeToGround();
+                    SetActiveIndexOnGround();
                     RequestActiveMacFromGround();
                 }
                 else
