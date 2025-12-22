@@ -111,6 +111,52 @@
             </ScrollViewer>
         </TabItem>
 
+        <TabItem Header="PartyDay">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <Grid Margin="10" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Text="Gate car control behind PartyDay QR check. Any QR is treated as valid until the real API is wired." FontWeight="Bold" Margin="0,0,0,10"/>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" Margin="0,0,0,8">
+                        <CheckBox x:Name="PartyDayModeToggle" Content="Enable PartyDay mode"/>
+                        <CheckBox x:Name="AnyQrToggle" Content="Accept any QR as valid" IsChecked="True"/>
+                        <TextBlock x:Name="PartyDayStatusLabel" Text="Status: Disabled" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="2" Spacing="8">
+                        <TextBlock Text="QR Scanner (Serial 115200)" FontWeight="Bold"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Port" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="ScannerPortComboBox" Width="140"/>
+                            <Button x:Name="ScannerRefreshButton" Content="Refresh" Width="80"/>
+                            <Button x:Name="ScannerConnectButton" Content="Connect" Width="90"/>
+                            <TextBlock x:Name="ScannerStateLabel" Text="Scanner: Disconnected" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="3" Spacing="8" Margin="0,6,0,0">
+                        <TextBlock Text="Session" FontWeight="Bold"/>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock x:Name="SessionCountdownLabel" Text="Remaining: --" VerticalAlignment="Center"/>
+                            <Button x:Name="EndSessionButton" Content="End Session" Width="110"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Border Grid.Row="4" Padding="10" BorderBrush="#444" BorderThickness="1" CornerRadius="6" Margin="0,6,0,0">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Test / Simulate verification" FontWeight="Bold"/>
+                            <TextBlock Text="Use this to mimic PartyDay membership verification while API is pending." FontStyle="Italic" FontSize="12"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="QR Payload" VerticalAlignment="Center"/>
+                                <TextBox x:Name="ManualQrTextBox" Width="260" Watermark="Scan or type a QR payload"/>
+                                <Button x:Name="SimulateQrButton" Content="Simulate Scan" Width="120"/>
+                            </StackPanel>
+                            <TextBlock x:Name="MembershipInfoLabel" Text="Member: (none)" FontFamily="Consolas" FontSize="12"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </ScrollViewer>
+        </TabItem>
+
         <TabItem Header="Logs">
             <Grid Margin="10">
                 <Grid.RowDefinitions>

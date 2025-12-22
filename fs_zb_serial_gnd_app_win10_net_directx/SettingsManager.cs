@@ -17,6 +17,9 @@ namespace RCCarController
         public int SteeringOffset { get; private set; }
         public int StartIndex { get; private set; }
         public int EndIndex { get; private set; }
+        public bool PartyDayEnabled { get; private set; }
+        public bool PartyDayAnyQr { get; private set; }
+        public string? PartyDayScannerPort { get; private set; }
 
         public void LoadSettings(ComboBox baudComboBox)
         {
@@ -29,6 +32,9 @@ namespace RCCarController
                 SteeringOffset = 0;
                 StartIndex = 0;
                 EndIndex = 0;
+                PartyDayEnabled = false;
+                PartyDayAnyQr = true;
+                PartyDayScannerPort = null;
                 
 
                 if (File.Exists(SETTINGS_FILE))
@@ -100,6 +106,21 @@ namespace RCCarController
                                         EndIndex = eIdx;
                                     }
                                     break;
+                                case "PartyDayEnabled":
+                                    if (bool.TryParse(parts[1], out var pdEnabled))
+                                    {
+                                        PartyDayEnabled = pdEnabled;
+                                    }
+                                    break;
+                                case "PartyDayAnyQr":
+                                    if (bool.TryParse(parts[1], out var pdAnyQr))
+                                    {
+                                        PartyDayAnyQr = pdAnyQr;
+                                    }
+                                    break;
+                                case "PartyDayScannerPort":
+                                    PartyDayScannerPort = parts[1];
+                                    break;
                             }
                         }
                     }
@@ -120,7 +141,10 @@ namespace RCCarController
             bool? autoConnectSerial = null,
             int? steeringOffset = null,
             int? startIndex = null,
-            int? endIndex = null)
+            int? endIndex = null,
+            bool? partyDayEnabled = null,
+            bool? partyDayAnyQr = null,
+            string? partyDayScannerPort = null)
         {
             try
             {
@@ -146,6 +170,12 @@ namespace RCCarController
                     StartIndex = startIndex.Value;
                 if (endIndex.HasValue)
                     EndIndex = endIndex.Value;
+                if (partyDayEnabled.HasValue)
+                    PartyDayEnabled = partyDayEnabled.Value;
+                if (partyDayAnyQr.HasValue)
+                    PartyDayAnyQr = partyDayAnyQr.Value;
+                if (partyDayScannerPort != null)
+                    PartyDayScannerPort = partyDayScannerPort;
 
                 WriteSettingsFile();
             }
@@ -169,6 +199,10 @@ namespace RCCarController
             settings.Add($"SteeringOffset={SteeringOffset}");
             settings.Add($"StartIndex={StartIndex}");
             settings.Add($"EndIndex={EndIndex}");
+            settings.Add($"PartyDayEnabled={PartyDayEnabled}");
+            settings.Add($"PartyDayAnyQr={PartyDayAnyQr}");
+            if (!string.IsNullOrWhiteSpace(PartyDayScannerPort))
+                settings.Add($"PartyDayScannerPort={PartyDayScannerPort}");
 
             File.WriteAllLines(SETTINGS_FILE, settings);
         }

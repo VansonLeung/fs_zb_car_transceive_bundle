@@ -42,7 +42,28 @@ namespace RCCarController
         private Button? applyRangeButton;
         private Button? setActiveButton;
         private Button? requestActiveMacButton;
+
         private EventWebSocketServer eventServer = new EventWebSocketServer();
+
+        private CheckBox? partyDayModeToggle;
+        private CheckBox? anyQrToggle;
+        private ComboBox? scannerPortComboBox;
+        private Button? scannerRefreshButton;
+        private Button? scannerConnectButton;
+        private TextBlock? scannerStateLabel;
+        private TextBlock? sessionCountdownLabel;
+        private Button? endSessionButton;
+        private TextBox? manualQrTextBox;
+        private Button? simulateQrButton;
+        private TextBlock? membershipInfoLabel;
+
+        private PartyDaySessionManager partyDaySessionManager = new PartyDaySessionManager();
+        private QrScannerManager qrScannerManager = new QrScannerManager();
+        private bool partyDayEnabled = false;
+        private bool partyDayAnyQr = true;
+        private string? partyDayScannerPort;
+        private bool neutralSentWhileLocked = false;
+        private System.Timers.Timer? scannerReconnectTimer;
 
         // Transmit Timer
         private System.Timers.Timer? transmitTimer;
@@ -69,6 +90,7 @@ namespace RCCarController
             }
             SetupTransmitTimer();
             SetupAutoConnectTimer();
+            SetupScannerReconnectTimer();
             // RefreshPorts(); // Moved to OnLoaded
         }
 
@@ -103,6 +125,17 @@ namespace RCCarController
             applyRangeButton = this.FindControl<Button>("ApplyRangeButton");
             setActiveButton = this.FindControl<Button>("SetActiveButton");
             requestActiveMacButton = this.FindControl<Button>("RequestActiveMacButton");
+            partyDayModeToggle = this.FindControl<CheckBox>("PartyDayModeToggle");
+            anyQrToggle = this.FindControl<CheckBox>("AnyQrToggle");
+            scannerPortComboBox = this.FindControl<ComboBox>("ScannerPortComboBox");
+            scannerRefreshButton = this.FindControl<Button>("ScannerRefreshButton");
+            scannerConnectButton = this.FindControl<Button>("ScannerConnectButton");
+            scannerStateLabel = this.FindControl<TextBlock>("ScannerStateLabel");
+            sessionCountdownLabel = this.FindControl<TextBlock>("SessionCountdownLabel");
+            endSessionButton = this.FindControl<Button>("EndSessionButton");
+            manualQrTextBox = this.FindControl<TextBox>("ManualQrTextBox");
+            simulateQrButton = this.FindControl<Button>("SimulateQrButton");
+            membershipInfoLabel = this.FindControl<TextBlock>("MembershipInfoLabel");
 
             // Wire up events
             if (steeringSlider != null) steeringSlider.ValueChanged += SteeringSlider_ValueChanged;
@@ -120,6 +153,18 @@ namespace RCCarController
             if (applyRangeButton != null) applyRangeButton.Click += ApplyRangeButton_Click;
             if (setActiveButton != null) setActiveButton.Click += SetActiveButton_Click;
             if (requestActiveMacButton != null) requestActiveMacButton.Click += RequestActiveMacButton_Click;
+            if (partyDayModeToggle != null) partyDayModeToggle.IsCheckedChanged += PartyDayModeToggle_IsCheckedChanged;
+            if (anyQrToggle != null) anyQrToggle.IsCheckedChanged += AnyQrToggle_IsCheckedChanged;
+            if (scannerRefreshButton != null) scannerRefreshButton.Click += ScannerRefreshButton_Click;
+            if (scannerConnectButton != null) scannerConnectButton.Click += ScannerConnectButton_Click;
+            if (endSessionButton != null) endSessionButton.Click += EndSessionButton_Click;
+            if (simulateQrButton != null) simulateQrButton.Click += SimulateQrButton_Click;
+
+            qrScannerManager.QrScanned += OnQrScanned;
+            qrScannerManager.StatusChanged += OnScannerStatusChanged;
+            partyDaySessionManager.SessionStarted += OnPartyDaySessionStarted;
+            partyDaySessionManager.SessionEnded += OnPartyDaySessionEnded;
+            partyDaySessionManager.Tick += OnPartyDaySessionTick;
 
             // Key handling
             this.KeyDown += OnKeyDown;
@@ -137,12 +182,24 @@ namespace RCCarController
             reverseThrottleInput = settingsManager.ReverseThrottleInput;
             autoConnectSerial = settingsManager.AutoConnectSerial;
             steeringOffset = settingsManager.SteeringOffset;
+            partyDayEnabled = settingsManager.PartyDayEnabled;
+            partyDayAnyQr = settingsManager.PartyDayAnyQr;
+            partyDayScannerPort = settingsManager.PartyDayScannerPort;
             if (startIndexNumeric != null) startIndexNumeric.Value = settingsManager.StartIndex;
             if (endIndexNumeric != null) endIndexNumeric.Value = settingsManager.EndIndex;
             if (activeIndexNumeric != null)
             {
                 var candidate = settingsManager.StartIndex <= settingsManager.EndIndex ? settingsManager.StartIndex : 0;
                 activeIndexNumeric.Value = candidate;
+            }
+
+            if (partyDayModeToggle != null) partyDayModeToggle.IsChecked = partyDayEnabled;
+            if (anyQrToggle != null) anyQrToggle.IsChecked = partyDayAnyQr;
+            UpdatePartyDayStatus();
+            RefreshScannerPorts();
+            if (scannerPortComboBox != null && !string.IsNullOrWhiteSpace(partyDayScannerPort))
+            {
+                scannerPortComboBox.SelectedItem = partyDayScannerPort;
             }
 
             if (webSocketToggle != null) webSocketToggle.IsChecked = webSocketClientEnabled;
@@ -285,6 +342,13 @@ namespace RCCarController
             autoConnectTimer.Elapsed += AutoConnectTimer_Elapsed;
         }
 
+        private void SetupScannerReconnectTimer()
+        {
+            scannerReconnectTimer = new System.Timers.Timer(5000);
+            scannerReconnectTimer.AutoReset = true;
+            scannerReconnectTimer.Elapsed += ScannerReconnectTimer_Elapsed;
+        }
+
         private void TransmitTimer_Tick(object? sender, ElapsedEventArgs e)
         {
             if (serialManager.IsConnected)
@@ -298,6 +362,19 @@ namespace RCCarController
                 // Send command
                 int effectiveSteering = Math.Clamp(ApplySteeringDirection(steeringValue) + steeringOffset, 0, 180);
                 int effectiveThrottle = Math.Clamp(ApplyThrottleDirection(throttleValue), 0, 180);
+
+                if (partyDayEnabled && !partyDaySessionManager.SessionActive)
+                {
+                    if (!neutralSentWhileLocked)
+                    {
+                        serialManager.SendCommand(90, 90);
+                        neutralSentWhileLocked = true;
+                        UpdateLatestMessageLabel("Locked by PartyDay");
+                    }
+                    return;
+                }
+
+                neutralSentWhileLocked = false;
 
                 serialManager.SendCommand(effectiveSteering, effectiveThrottle);
                 UpdateLatestMessageLabel(serialManager.LatestMessage);
@@ -402,6 +479,78 @@ namespace RCCarController
             UpdateAutoConnectTimerState();
         }
 
+        private void PartyDayModeToggle_IsCheckedChanged(object? sender, RoutedEventArgs e)
+        {
+            partyDayEnabled = (sender as CheckBox)?.IsChecked ?? false;
+            settingsManager.SaveSettings(partyDayEnabled: partyDayEnabled);
+            if (!partyDayEnabled)
+            {
+                partyDaySessionManager.StopSession();
+                neutralSentWhileLocked = false;
+            }
+            UpdatePartyDayStatus();
+            UpdateScannerReconnectTimerState();
+        }
+
+        private void AnyQrToggle_IsCheckedChanged(object? sender, RoutedEventArgs e)
+        {
+            partyDayAnyQr = (sender as CheckBox)?.IsChecked ?? true;
+            settingsManager.SaveSettings(partyDayAnyQr: partyDayAnyQr);
+        }
+
+        private void ScannerRefreshButton_Click(object? sender, RoutedEventArgs e)
+        {
+            RefreshScannerPorts();
+        }
+
+        private void ScannerConnectButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (qrScannerManager.IsConnected)
+            {
+                qrScannerManager.Disconnect();
+                UpdateScannerStateLabel("Scanner: Disconnected");
+                UpdatePartyDayStatus();
+                UpdateScannerReconnectTimerState();
+                return;
+            }
+
+            var port = scannerPortComboBox?.SelectedItem?.ToString();
+            if (string.IsNullOrWhiteSpace(port))
+            {
+                LogMessage("Select a scanner port first.");
+                return;
+            }
+
+            if (qrScannerManager.Connect(port))
+            {
+                partyDayScannerPort = port;
+                settingsManager.SaveSettings(partyDayScannerPort: partyDayScannerPort);
+                UpdateScannerStateLabel($"Scanner: Connected ({port})");
+            }
+            else
+            {
+                UpdateScannerStateLabel($"Scanner: Failed ({port})");
+            }
+
+            UpdatePartyDayStatus();
+            UpdateScannerReconnectTimerState();
+        }
+
+        private void EndSessionButton_Click(object? sender, RoutedEventArgs e)
+        {
+            partyDaySessionManager.StopSession();
+        }
+
+        private void SimulateQrButton_Click(object? sender, RoutedEventArgs e)
+        {
+            var payload = manualQrTextBox?.Text ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(payload))
+            {
+                payload = "SIMULATED-GUEST";
+            }
+            HandleQrPayload(payload, source: "Simulated");
+        }
+
         private void UpdateSteeringOffsetLabel()
         {
             Dispatcher.UIThread.InvokeAsync(() =>
@@ -496,6 +645,195 @@ namespace RCCarController
                     await Connect(showErrors: false);
                 });
             }
+        }
+
+        private void UpdateScannerReconnectTimerState()
+        {
+            if (scannerReconnectTimer == null)
+            {
+                return;
+            }
+
+            scannerReconnectTimer.Stop();
+
+            if (!partyDayEnabled)
+            {
+                return;
+            }
+
+            scannerReconnectTimer.Start();
+        }
+
+        private void ScannerReconnectTimer_Elapsed(object? sender, ElapsedEventArgs e)
+        {
+            if (!partyDayEnabled || qrScannerManager.IsConnected)
+            {
+                return;
+            }
+
+            var port = scannerPortComboBox?.SelectedItem?.ToString();
+            if (string.IsNullOrWhiteSpace(port))
+            {
+                port = partyDayScannerPort;
+            }
+
+            if (string.IsNullOrWhiteSpace(port))
+            {
+                return;
+            }
+
+            if (qrScannerManager.Connect(port))
+            {
+                partyDayScannerPort = port;
+                settingsManager.SaveSettings(partyDayScannerPort: partyDayScannerPort);
+                UpdateScannerStateLabel($"Scanner: Connected ({port})");
+                UpdatePartyDayStatus();
+            }
+        }
+
+        private void UpdatePartyDayStatus()
+        {
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (partyDayModeToggle != null)
+                {
+                    partyDayModeToggle.IsChecked = partyDayEnabled;
+                }
+                if (anyQrToggle != null)
+                {
+                    anyQrToggle.IsChecked = partyDayAnyQr;
+                }
+                if (scannerStateLabel != null)
+                {
+                    scannerStateLabel.Text = qrScannerManager.IsConnected ? "Scanner: Connected" : "Scanner: Disconnected";
+                }
+                if (scannerConnectButton != null)
+                {
+                    scannerConnectButton.Content = qrScannerManager.IsConnected ? "Disconnect" : "Connect";
+                }
+                if (sessionCountdownLabel != null)
+                {
+                    sessionCountdownLabel.Text = partyDaySessionManager.SessionActive
+                        ? $"Remaining: {partyDaySessionManager.Remaining:mm\\:ss}"
+                        : "Remaining: --";
+                }
+                var statusText = partyDayEnabled
+                    ? (partyDaySessionManager.SessionActive ? "Status: Unlocked (timer running)" : "Status: Locked until QR scan")
+                    : "Status: Disabled";
+                if (this.FindControl<TextBlock>("PartyDayStatusLabel") is TextBlock statusLabel)
+                {
+                    statusLabel.Text = statusText;
+                }
+            });
+        }
+
+        private void RefreshScannerPorts()
+        {
+            if (scannerPortComboBox == null)
+                return;
+
+            scannerPortComboBox.Items.Clear();
+            foreach (var port in qrScannerManager.GetAvailablePorts())
+            {
+                scannerPortComboBox.Items.Add(port);
+            }
+
+            if (!string.IsNullOrWhiteSpace(partyDayScannerPort) && scannerPortComboBox.Items.Contains(partyDayScannerPort))
+            {
+                scannerPortComboBox.SelectedItem = partyDayScannerPort;
+            }
+            else if (scannerPortComboBox.Items.Count > 0)
+            {
+                scannerPortComboBox.SelectedIndex = 0;
+            }
+        }
+
+        private void UpdateScannerStateLabel(string text)
+        {
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (scannerStateLabel != null)
+                {
+                    scannerStateLabel.Text = text;
+                }
+            });
+        }
+
+        private void OnScannerStatusChanged(string status)
+        {
+            UpdateScannerStateLabel(status);
+            LogMessage(status);
+            UpdatePartyDayStatus();
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (membershipInfoLabel != null)
+                {
+                    membershipInfoLabel.Text = status;
+                }
+            });
+        }
+
+        private void OnQrScanned(string payload)
+        {
+            HandleQrPayload(payload, source: "Scanner");
+        }
+
+        private void HandleQrPayload(string payload, string source)
+        {
+            var sanitized = string.IsNullOrWhiteSpace(payload) ? "(empty)" : payload.Trim();
+
+            if (partyDayAnyQr)
+            {
+                StartSessionForMember($"Guest-{Math.Abs(sanitized.GetHashCode()) % 10000:D4}", sanitized, source);
+                return;
+            }
+
+            // Placeholder for future API call. Currently treats any payload as valid.
+            StartSessionForMember($"Guest-{Math.Abs(sanitized.GetHashCode()) % 10000:D4}", sanitized, source);
+        }
+
+        private void StartSessionForMember(string memberName, string payload, string source)
+        {
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (membershipInfoLabel != null)
+                {
+                    membershipInfoLabel.Text = $"Member: {memberName} | QR: {payload} | Via: {source} | Verified {DateTime.Now:HH:mm:ss}";
+                }
+            });
+
+            partyDaySessionManager.StartSession();
+            LogMessage($"PartyDay session started for {memberName} (source: {source}).");
+            UpdatePartyDayStatus();
+        }
+
+        private void OnPartyDaySessionStarted()
+        {
+            neutralSentWhileLocked = false;
+            UpdatePartyDayStatus();
+        }
+
+        private void OnPartyDaySessionEnded()
+        {
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (membershipInfoLabel != null && partyDayEnabled)
+                {
+                    membershipInfoLabel.Text += " | Session ended";
+                }
+            });
+            UpdatePartyDayStatus();
+        }
+
+        private void OnPartyDaySessionTick(TimeSpan remaining)
+        {
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (sessionCountdownLabel != null)
+                {
+                    sessionCountdownLabel.Text = $"Remaining: {remaining:mm\\:ss}";
+                }
+            });
         }
 
         private void ApplyRangeButton_Click(object? sender, RoutedEventArgs e)
@@ -910,6 +1248,10 @@ namespace RCCarController
                 gameControllerManager.Dispose();
             }
             webSocketInputManager.Dispose();
+            qrScannerManager.Dispose();
+            partyDaySessionManager.Dispose();
+            scannerReconnectTimer?.Stop();
+            scannerReconnectTimer?.Dispose();
             autoConnectTimer?.Stop();
             autoConnectTimer?.Dispose();
             eventServer.Dispose();
