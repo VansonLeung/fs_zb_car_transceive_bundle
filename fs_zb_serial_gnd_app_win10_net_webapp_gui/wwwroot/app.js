@@ -14,6 +14,11 @@ const rawThrottleEl = document.getElementById("rawThrottleValue");
 const rawBrakeEl = document.getElementById("rawBrakeValue");
 const videoEl = document.getElementById("cameraFeed");
 const fullscreenBtn = document.getElementById("fullscreenToggle");
+let audioCtx;
+let engineBuffer = null;
+let engineSource = null;
+let engineGain = null;
+let engineLoading = false;
 
 let socket;
 let reconnectHandle;
@@ -78,6 +83,79 @@ function mapRange(value, fromMin, fromMax, toMin, toMax) {
   return (
     ((clamped - fromMin) * (toMax - toMin)) / (fromMax - fromMin) + toMin
   );
+}
+
+function ensureAudio() {
+  if (audioCtx) return audioCtx;
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  audioCtx = ctx;
+  return ctx;
+}
+
+async function loadEngineBuffer() {
+  if (engineBuffer || engineLoading) return engineBuffer;
+  engineLoading = true;
+  try {
+    const resp = await fetch("car_engine.wav");
+    const arr = await resp.arrayBuffer();
+    const ctx = ensureAudio();
+    engineBuffer = await ctx.decodeAudioData(arr);
+  } catch (err) {
+    console.warn("Engine audio load failed", err);
+  } finally {
+    engineLoading = false;
+  }
+  return engineBuffer;
+}
+
+async function startEngineLoop() {
+  const ctx = ensureAudio();
+  if (ctx.state === "suspended") await ctx.resume();
+  const buffer = await loadEngineBuffer();
+  if (!buffer) return;
+
+  if (engineSource) {
+    try { engineSource.stop(); } catch {}
+  }
+
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  source.playbackRate.value = 0.8;
+
+  const gain = ctx.createGain();
+  gain.gain.value = 0.06;
+
+  source.connect(gain).connect(ctx.destination);
+  source.start();
+
+  engineSource = source;
+  engineGain = gain;
+}
+
+async function updateEngineSound(drivePercentSigned) {
+  // drivePercentSigned: -1..1 where negative is reverse/back-drive
+  const effort = clamp(Math.abs(drivePercentSigned), 0, 1);
+  const isReverse = drivePercentSigned < -0.001;
+
+  const ctx = ensureAudio();
+  if (ctx.state === "suspended") await ctx.resume();
+
+  if (!engineSource) {
+    await startEngineLoop();
+  }
+
+  if (!engineSource || !engineGain) return;
+
+  const rateBase = isReverse ? 0.65 : 0.7;
+  const rateSpan = isReverse ? 1.0 : 1.3;
+  const rate = rateBase + effort * rateSpan; // reverse slightly lower pitch
+
+  const gainBase = 0.04;
+  const gainSpan = isReverse ? 0.18 : 0.24;
+  const gain = gainBase + effort * gainSpan;
+  engineSource.playbackRate.value = rate;
+  engineGain.gain.value = gain;
 }
 
 function setNeedleRotation(needle, percent) {
@@ -158,17 +236,19 @@ function updateTelemetry(data) {
     speedValueEl.textContent = speedKph;
   }
 
-  // Update Throttle Bar
+  // Update Throttle/Brake Bars and engine sound
+  const throttlePercent = clamp(throttleRawResolved / 65535, 0, 1);
+  const brakePercent = clamp(brakeRawResolved / 65535, 0, 1);
+
   if (throttleBar) {
-    const throttlePercent = clamp(throttleRawResolved / 65535, 0, 1);
     throttleBar.style.height = `${throttlePercent * 100}%`;
   }
 
-  // Update Brake Bar
   if (brakeBar) {
-    const brakePercent = clamp(brakeRawResolved / 65535, 0, 1);
     brakeBar.style.height = `${brakePercent * 100}%`;
   }
+
+  updateEngineSound(normalized).catch(() => {});
 
   if (steeringValueEl) steeringValueEl.textContent = `${steeringValue}°`;
   if (rawThrottleEl) rawThrottleEl.textContent = `${throttleRawResolved}`;
