@@ -21,6 +21,10 @@ public class WebSocketInputManager : IDisposable
     public event Action<int, int>? ControlValuesChanged; // steering, throttle (0-180)
     public event Action<string>? StatusChanged;
 
+    public int? LastRawSteering { get; private set; }
+    public int? LastRawThrottle { get; private set; }
+    public int? LastRawBrake { get; private set; }
+
     public bool IsRunning => workerTask != null && !workerTask.IsCompleted;
 
     public void Start()
@@ -144,6 +148,10 @@ public class WebSocketInputManager : IDisposable
             int brakeRaw = root.TryGetProperty("brake", out var brakeElement)
                 ? brakeElement.GetInt32()
                 : 0;
+
+            LastRawSteering = steeringRaw;
+            LastRawThrottle = throttleRaw;
+            LastRawBrake = brakeRaw;
 
             // Combine throttle and brake around neutral (90) so more throttle moves below 90 and more brake moves above 90.
             int netInput = Math.Clamp(throttleRaw - brakeRaw, -65535, 65535);

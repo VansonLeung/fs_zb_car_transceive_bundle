@@ -42,10 +42,17 @@ namespace RCCarController
         private Button? applyRangeButton;
         private Button? setActiveButton;
         private Button? requestActiveMacButton;
+        private EventWebSocketServer eventServer = new EventWebSocketServer();
 
         // Transmit Timer
         private System.Timers.Timer? transmitTimer;
         private System.Timers.Timer? autoConnectTimer;
+        private int? lastBroadcastSteering;
+        private int? lastBroadcastThrottle;
+        private int? lastBroadcastBrake;
+        private int? lastBroadcastSteeringRaw;
+        private int? lastBroadcastThrottleRaw;
+        private int? lastBroadcastBrakeRaw;
 
         public MainWindow()
         {
@@ -144,11 +151,25 @@ namespace RCCarController
             if (autoConnectToggle != null) autoConnectToggle.IsChecked = autoConnectSerial;
             if (steeringOffsetNumeric != null) steeringOffsetNumeric.Value = steeringOffset;
 
+            StartEventServer();
             // Now safe to refresh ports
             RefreshPorts();
             UpdateSteeringOffsetLabel();
             ApplyWebSocketEnabledState();
             UpdateAutoConnectTimerState();
+        }
+
+        private void StartEventServer()
+        {
+            try
+            {
+                eventServer.Start();
+                LogMessage($"Event WS server: ws://localhost:{eventServer.Port}{eventServer.Path}");
+            }
+            catch (Exception ex)
+            {
+                LogMessage($"Event WS start failed: {ex.Message}");
+            }
         }
 
         private void OnKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
@@ -280,6 +301,7 @@ namespace RCCarController
 
                 serialManager.SendCommand(effectiveSteering, effectiveThrottle);
                 UpdateLatestMessageLabel(serialManager.LatestMessage);
+                TryBroadcastControlEvent(effectiveSteering, effectiveThrottle);
             }
         }
 
@@ -623,6 +645,10 @@ namespace RCCarController
             UpdateSteeringUI();
             UpdateThrottleUI();
             isUpdatingFromWebSocket = false;
+
+            var effectiveSteering = Math.Clamp(ApplySteeringDirection(steeringValue) + steeringOffset, 0, 180);
+            var effectiveThrottle = Math.Clamp(ApplyThrottleDirection(throttleValue), 0, 180);
+            TryBroadcastControlEvent(effectiveSteering, effectiveThrottle);
         }
 
         private void UpdateLatestMessageLabel(string message)
@@ -685,6 +711,10 @@ namespace RCCarController
             throttleValue = Math.Clamp(throttle, 0, 180);
             UpdateSteeringUI();
             UpdateThrottleUI();
+
+            var effectiveSteering = Math.Clamp(ApplySteeringDirection(steeringValue) + steeringOffset, 0, 180);
+            var effectiveThrottle = Math.Clamp(ApplyThrottleDirection(throttleValue), 0, 180);
+            TryBroadcastControlEvent(effectiveSteering, effectiveThrottle);
         }
 
         private void RefreshButton_Click(object? sender, RoutedEventArgs e)
@@ -882,7 +912,58 @@ namespace RCCarController
             webSocketInputManager.Dispose();
             autoConnectTimer?.Stop();
             autoConnectTimer?.Dispose();
+            eventServer.Dispose();
             base.OnClosing(e);
+        }
+
+        private void TryBroadcastControlEvent(int steering180, int throttle180)
+        {
+            var rawSteeringValue = webSocketInputManager.LastRawSteering
+                ?? MapToRange(steering180, 0, 180, 0, 65535);
+            var rawThrottleValue = webSocketInputManager.LastRawThrottle
+                ?? MapToRange(throttle180, 0, 180, 0, 65535);
+            var rawBrakeValue = webSocketInputManager.LastRawBrake
+                ?? 0;
+            var brake180 = MapToRange(rawBrakeValue, 0, 65535, 0, 180);
+
+            if (lastBroadcastSteering == steering180 &&
+                lastBroadcastThrottle == throttle180 &&
+                lastBroadcastBrake == brake180 &&
+                lastBroadcastSteeringRaw == rawSteeringValue &&
+                lastBroadcastThrottleRaw == rawThrottleValue &&
+                lastBroadcastBrakeRaw == rawBrakeValue)
+            {
+                return;
+            }
+
+            lastBroadcastSteering = steering180;
+            lastBroadcastThrottle = throttle180;
+            lastBroadcastBrake = brake180;
+            lastBroadcastSteeringRaw = rawSteeringValue;
+            lastBroadcastThrottleRaw = rawThrottleValue;
+            lastBroadcastBrakeRaw = rawBrakeValue;
+
+            var payload = new
+            {
+                version = "1.0",
+                type = "control",
+                ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                steering = steering180,
+                throttle = throttle180,
+                brake = brake180,
+                steeringRaw = rawSteeringValue,
+                throttleRaw = rawThrottleValue,
+                brakeRaw = rawBrakeValue
+            };
+
+            _ = eventServer.BroadcastAsync(payload);
+        }
+
+        private int MapToRange(int value, int fromMin, int fromMax, int toMin, int toMax)
+        {
+            double clamped = Math.Clamp(value, fromMin, fromMax);
+            double scaled = (clamped - fromMin) * (toMax - toMin) / (fromMax - fromMin) + toMin;
+            return (int)Math.Round(Math.Clamp(scaled, toMin, toMax));
         }
     }
 }

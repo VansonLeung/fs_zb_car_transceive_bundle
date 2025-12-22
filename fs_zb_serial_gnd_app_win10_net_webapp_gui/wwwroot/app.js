@@ -1,4 +1,7 @@
-const WS_URL = "ws://localhost:8080/";
+const WS_ENDPOINTS = [
+  { url: "ws://localhost:9091/events/", label: "events" },
+  { url: "ws://localhost:8080/", label: "legacy" },
+];
 const RECONNECT_DELAY_MS = 4000;
 
 const statusEl = document.getElementById("connectionStatus");
@@ -14,6 +17,7 @@ const fullscreenBtn = document.getElementById("fullscreenToggle");
 
 let socket;
 let reconnectHandle;
+let currentEndpointIndex = 0;
 
 function setStatus(text, isOnline = false) {
   statusEl.textContent = text;
@@ -22,22 +26,26 @@ function setStatus(text, isOnline = false) {
 
 function connectWebSocket() {
   clearTimeout(reconnectHandle);
-  setStatus("Connecting...");
+  const endpoint = WS_ENDPOINTS[currentEndpointIndex];
+  setStatus(`Connecting (${endpoint.label})...`);
 
   try {
-    socket = new WebSocket(WS_URL);
+    socket = new WebSocket(endpoint.url);
   } catch (err) {
     setStatus(`WebSocket error: ${err.message}`);
     scheduleReconnect();
     return;
   }
 
-  socket.addEventListener("open", () => setStatus("ENGINE: ON", true));
+  socket.addEventListener("open", () => setStatus(`ENGINE: ON (${endpoint.label})`, true));
 
   socket.addEventListener("message", (event) => {
     try {
       const payload = JSON.parse(event.data);
-      updateTelemetry(payload);
+      const normalized = normalizeTelemetryPayload(payload);
+      if (normalized) {
+        updateTelemetry(normalized);
+      }
     } catch (err) {
       setStatus(`Data error: ${err.message}`);
     }
@@ -57,6 +65,7 @@ function connectWebSocket() {
 
 function scheduleReconnect() {
   clearTimeout(reconnectHandle);
+  currentEndpointIndex = (currentEndpointIndex + 1) % WS_ENDPOINTS.length;
   reconnectHandle = setTimeout(connectWebSocket, RECONNECT_DELAY_MS);
 }
 
@@ -78,19 +87,67 @@ function setNeedleRotation(needle, percent) {
   needle.style.transform = `translateX(-50%) rotate(${rotation}deg)`;
 }
 
-function updateTelemetry(data) {
-  const steeringRaw = Number.isFinite(data.steering) ? data.steering : 32767;
-  const throttleRaw = Number.isFinite(data.throttle) ? data.throttle : 0;
-  const brakeRaw = Number.isFinite(data.brake) ? data.brake : 0;
+function toNumber(value, fallback = null) {
+  return Number.isFinite(value) ? Number(value) : fallback;
+}
 
-  const netInput = clamp(throttleRaw - brakeRaw, -65535, 65535);
+function normalizeTelemetryPayload(payload) {
+  if (!payload || typeof payload !== "object") return null;
+
+  if (payload.type === "control" && payload.version) {
+    return {
+      steering180: toNumber(payload.steering),
+      throttle180: toNumber(payload.throttle),
+      brake180: toNumber(payload.brake),
+      steeringRaw: toNumber(payload.steeringRaw),
+      throttleRaw: toNumber(payload.throttleRaw),
+      brakeRaw: toNumber(payload.brakeRaw),
+    };
+  }
+
+  if (
+    Number.isFinite(payload.steering) ||
+    Number.isFinite(payload.throttle) ||
+    Number.isFinite(payload.brake)
+  ) {
+    return {
+      steeringRaw: toNumber(payload.steering, 32767),
+      throttleRaw: toNumber(payload.throttle, 0),
+      brakeRaw: toNumber(payload.brake, 0),
+    };
+  }
+
+  return null;
+}
+
+function updateTelemetry(data) {
+  if (!data) return;
+
+  const steeringRawResolved = Number.isFinite(data.steeringRaw)
+    ? data.steeringRaw
+    : Math.round(mapRange(clamp(data.steering180 ?? 90, 0, 180), 0, 180, 0, 65535));
+
+  const throttleRawResolved = Number.isFinite(data.throttleRaw)
+    ? data.throttleRaw
+    : Math.round(mapRange(clamp(data.throttle180 ?? 90, 0, 180), 0, 180, 0, 65535));
+
+  const brakeRawResolved = Number.isFinite(data.brakeRaw)
+    ? data.brakeRaw
+    : Math.round(mapRange(clamp(data.brake180 ?? 0, 0, 180), 0, 180, 0, 65535));
+
+  const netInput = clamp(throttleRawResolved - brakeRawResolved, -65535, 65535);
   const normalized = netInput / 65535;
-  const throttleValue = Math.round(clamp(90 - normalized * 90, 0, 180));
-  const steeringValue = Math.round(mapRange(steeringRaw, 0, 65535, 0, 180));
+  const throttleValueFromRaw = Math.round(clamp(90 - normalized * 90, 0, 180));
+
+  const throttleValue = Number.isFinite(data.throttle180)
+    ? Math.round(clamp(data.throttle180, 0, 180))
+    : throttleValueFromRaw;
+
+  const steeringValue = Number.isFinite(data.steering180)
+    ? Math.round(clamp(data.steering180, 0, 180))
+    : Math.round(mapRange(steeringRawResolved, 0, 65535, 0, 180));
 
   const forwardPercent = clamp((90 - throttleValue) / 90, 0, 1);
-  const signedThrottlePercent = clamp((90 - throttleValue) / 90, -1, 1);
-  const throttleDisplayPercent = Math.round(signedThrottlePercent * 100);
   const speedKph = Math.round(forwardPercent * 150);
 
   // Update Speed Gauge
@@ -103,21 +160,19 @@ function updateTelemetry(data) {
 
   // Update Throttle Bar
   if (throttleBar) {
-    // Show raw throttle input
-    const throttlePercent = clamp(throttleRaw / 65535, 0, 1);
+    const throttlePercent = clamp(throttleRawResolved / 65535, 0, 1);
     throttleBar.style.height = `${throttlePercent * 100}%`;
   }
 
   // Update Brake Bar
   if (brakeBar) {
-    // Show raw brake input
-    const brakePercent = clamp(brakeRaw / 65535, 0, 1);
+    const brakePercent = clamp(brakeRawResolved / 65535, 0, 1);
     brakeBar.style.height = `${brakePercent * 100}%`;
   }
 
   if (steeringValueEl) steeringValueEl.textContent = `${steeringValue}°`;
-  if (rawThrottleEl) rawThrottleEl.textContent = `${throttleRaw}`;
-  if (rawBrakeEl) rawBrakeEl.textContent = `${brakeRaw}`;
+  if (rawThrottleEl) rawThrottleEl.textContent = `${throttleRawResolved}`;
+  if (rawBrakeEl) rawBrakeEl.textContent = `${brakeRawResolved}`;
 }
 
 let currentDeviceIndex = 0;
