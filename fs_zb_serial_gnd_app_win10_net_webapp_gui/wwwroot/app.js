@@ -31,6 +31,8 @@ let engineGain = null;
 let engineLoading = false;
 let lastPartyState = {};
 let partyDebugEnabled = false;
+const engineStartAudio = new Audio("car_ignition.wav");
+engineStartAudio.preload = "auto";
 
 function applyDebugVisibility() {
   const hidden = !partyDebugEnabled;
@@ -336,19 +338,16 @@ function ensureAudio() {
 }
 
 function playEngineStart() {
-  const ctx = ensureAudio();
-  if (ctx.state === "suspended") ctx.resume();
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = "sawtooth";
-  osc.frequency.setValueAtTime(220, ctx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(820, ctx.currentTime + 0.35);
-  gain.gain.setValueAtTime(0.001, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.05);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.65);
-  osc.connect(gain).connect(ctx.destination);
-  osc.start();
-  osc.stop(ctx.currentTime + 0.7);
+  try {
+    engineStartAudio.currentTime = 0;
+    engineStartAudio.play().catch(() => {
+      const ctx = ensureAudio();
+      if (ctx.state === "suspended") ctx.resume();
+    });
+  } catch {
+    const ctx = ensureAudio();
+    if (ctx.state === "suspended") ctx.resume();
+  }
 }
 
 function playEndChirp() {

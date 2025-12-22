@@ -11,11 +11,18 @@ namespace RCCarController
         private readonly StringBuilder buffer = new StringBuilder();
         private bool disposed;
         private readonly System.Timers.Timer flushTimer = new System.Timers.Timer(150) { AutoReset = false };
+        private string? lastScanPayload;
+        private DateTime lastScanAt = DateTime.MinValue;
 
         public event Action<string>? QrScanned;
         public event Action<string>? StatusChanged;
 
         public bool IsConnected => serialPort?.IsOpen == true;
+
+        /// <summary>
+        /// Debounce window in milliseconds for identical payloads to avoid double-trigger.
+        /// </summary>
+        public int DebounceWindowMs { get; set; } = 1500;
 
         public string[] GetAvailablePorts() => SerialPort.GetPortNames();
 
@@ -87,7 +94,7 @@ namespace RCCarController
                     current = current.Substring(splitIndex + 1);
                     if (line.Length > 0)
                     {
-                        QrScanned?.Invoke(line);
+                        EmitScan(line);
                     }
                 }
 
@@ -118,8 +125,23 @@ namespace RCCarController
 
             if (!string.IsNullOrEmpty(pending))
             {
-                QrScanned?.Invoke(pending);
+                EmitScan(pending);
             }
+        }
+
+        private void EmitScan(string payload)
+        {
+            var now = DateTime.UtcNow;
+            var windowMs = Math.Max(0, DebounceWindowMs);
+
+            if (payload == lastScanPayload && (now - lastScanAt).TotalMilliseconds < windowMs)
+            {
+                return; // duplicate within debounce window; stay silent
+            }
+
+            lastScanPayload = payload;
+            lastScanAt = now;
+            QrScanned?.Invoke(payload);
         }
 
         private static int IndexOfLineBreak(string text)
