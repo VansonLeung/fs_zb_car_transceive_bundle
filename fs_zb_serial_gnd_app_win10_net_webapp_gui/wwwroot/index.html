@@ -3,31 +3,43 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RC Car HUD</title>
+    <title>RC PartyDay HUD</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div id="cameraTrigger" title="Tap to switch camera"></div>
     <button id="fullscreenToggle" aria-label="Toggle Fullscreen"></button>
     <video id="cameraFeed" autoplay playsinline muted></video>
+
+    <div class="fx-layer">
+      <div id="partyGlow" class="party-glow"></div>
+      <div id="qrToast" class="toast hidden">QR VERIFIED</div>
+    </div>
+
     <div class="hud-overlay">
+      <div class="hud-top-row">
+        <div class="badge subtle" id="lapTimer">Session --:--</div>
+        <div class="badge muted" id="carStatus">Car</div>
+      </div>
+
       <div class="hud-bottom-row">
         <div class="hud-left">
           <div id="connectionStatus" class="status">Connecting...</div>
-          <section class="telemetry" style="display: none;">
+          <section class="telemetry debug-only" id="telemetryPanel">
             <div class="telemetry-item">
               <span class="telemetry-label">Steering</span>
               <span id="steeringValue" class="telemetry-value">0°</span>
             </div>
-            <div class="telemetry-item">
+            <div class="telemetry-item debug-only">
               <span class="telemetry-label">Throttle Raw</span>
               <span id="rawThrottleValue" class="telemetry-value">0</span>
             </div>
-            <div class="telemetry-item">
+            <div class="telemetry-item debug-only">
               <span class="telemetry-label">Brake Raw</span>
               <span id="rawBrakeValue" class="telemetry-value">0</span>
             </div>
           </section>
+          <div id="eventTicker" class="ticker debug-only"></div>
         </div>
 
         <div class="hud-right">
@@ -57,6 +69,7 @@
         </div>
       </div>
     </div>
+
     <script src="app.js" type="module"></script>
   </body>
 </html>

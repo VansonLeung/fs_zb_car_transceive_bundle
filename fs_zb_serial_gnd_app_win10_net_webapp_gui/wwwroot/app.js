@@ -14,15 +14,34 @@ const rawThrottleEl = document.getElementById("rawThrottleValue");
 const rawBrakeEl = document.getElementById("rawBrakeValue");
 const videoEl = document.getElementById("cameraFeed");
 const fullscreenBtn = document.getElementById("fullscreenToggle");
+const partyBadge = document.getElementById("partyBadge");
+const lapTimer = document.getElementById("lapTimer");
+const tickerEl = document.getElementById("eventTicker");
+const toastEl = document.getElementById("qrToast");
+const partyGlow = document.getElementById("partyGlow");
+const debugElements = document.querySelectorAll(".debug-only");
+
+let socket;
+let reconnectHandle;
+let currentEndpointIndex = 0;
 let audioCtx;
 let engineBuffer = null;
 let engineSource = null;
 let engineGain = null;
 let engineLoading = false;
+let lastPartyState = {};
+let partyDebugEnabled = false;
 
-let socket;
-let reconnectHandle;
-let currentEndpointIndex = 0;
+function applyDebugVisibility() {
+  const hidden = !partyDebugEnabled;
+  debugElements.forEach((el) => el.classList.toggle("debug-hidden", hidden));
+  if (hidden) {
+    if (rawThrottleEl) rawThrottleEl.textContent = "--";
+    if (rawBrakeEl) rawBrakeEl.textContent = "--";
+  }
+}
+
+applyDebugVisibility();
 
 function setStatus(text, isOnline = false) {
   statusEl.textContent = text;
@@ -205,15 +224,147 @@ function handlePartyDayEvent(payload) {
   if (typeof type !== "string") return;
   if (!type.startsWith("partyday")) return;
 
+  if (typeof payload.debugEnabled === "boolean") {
+    partyDebugEnabled = payload.debugEnabled;
+    applyDebugVisibility();
+  }
+
   try {
     window.dispatchEvent(new CustomEvent("partyday", { detail: payload }));
   } catch (err) {
     console.warn("PartyDay event dispatch failed", err);
   }
 
+  renderPartyUi(payload);
   if (payload.action || payload.reason) {
-    console.log("PartyDay", type, payload.action || payload.reason, payload);
+    pushTicker(`${type} :: ${payload.action || payload.reason}`);
   }
+}
+
+function renderPartyUi(payload) {
+  const { type, action, reason, remainingMs, modeEnabled, sessionActive, member, qrPayload, source } = payload;
+
+  if (type === "partyday.state") {
+    updateBadge(modeEnabled, sessionActive, reason);
+    updateTimer(remainingMs);
+  }
+
+  if (type === "partyday.session") {
+    updateBadge(modeEnabled, sessionActive, action);
+    updateTimer(remainingMs);
+
+    if (action === "started") {
+      showToast(qrPayload ? `QR VERIFIED (${source || "scanner"})` : "SESSION STARTED", false);
+      playEngineStart();
+      pulseGlow();
+    } else if (action === "ended") {
+      showToast("SESSION ENDED", true);
+      playEndChirp();
+    } else if (action === "tick") {
+      // keep timer fresh
+    }
+
+    if (member || qrPayload) {
+      pushTicker(`Member ${member || "?"} :: ${qrPayload || "QR"}`);
+    }
+  }
+
+  lastPartyState = { ...lastPartyState, ...payload };
+}
+
+function updateBadge(modeEnabled, sessionActive, context) {
+  if (!partyBadge) return;
+  const active = modeEnabled && sessionActive;
+  partyBadge.classList.toggle("active", active);
+  partyBadge.classList.toggle("muted", !modeEnabled);
+  const stateText = !modeEnabled
+    ? "PartyDay: Disabled"
+    : active
+    ? "PartyDay: Active"
+    : "PartyDay: Locked";
+  partyBadge.textContent = context ? `${stateText} · ${context}` : stateText;
+}
+
+function updateTimer(remainingMs) {
+  if (!lapTimer) return;
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
+    lapTimer.textContent = "Session --:--";
+    return;
+  }
+  const totalSec = Math.round(remainingMs / 1000);
+  const m = Math.floor(totalSec / 60)
+    .toString()
+    .padStart(2, "0");
+  const s = (totalSec % 60).toString().padStart(2, "0");
+  lapTimer.textContent = `Session ${m}:${s}`;
+}
+
+function pushTicker(text) {
+  if (!tickerEl || !text || !partyDebugEnabled) return;
+  const line = document.createElement("div");
+  line.className = "ticker-line";
+  line.textContent = `${new Date().toLocaleTimeString()} :: ${text}`;
+  tickerEl.prepend(line);
+  while (tickerEl.childElementCount > 6) {
+    tickerEl.lastChild?.remove();
+  }
+}
+
+function showToast(text, isError = false) {
+  if (!toastEl) return;
+  toastEl.textContent = text;
+  toastEl.classList.remove("hidden", "error", "show");
+  if (isError) toastEl.classList.add("error");
+  requestAnimationFrame(() => {
+    toastEl.classList.add("show");
+    setTimeout(() => toastEl.classList.remove("show"), 1600);
+  });
+}
+
+function pulseGlow() {
+  if (!partyGlow) return;
+  partyGlow.style.animation = "none";
+  void partyGlow.offsetWidth;
+  partyGlow.style.animation = "slow-glow 6s ease-in-out infinite, flash-green 0.6s ease";
+}
+
+function ensureAudio() {
+  if (audioCtx) return audioCtx;
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  audioCtx = ctx;
+  return ctx;
+}
+
+function playEngineStart() {
+  const ctx = ensureAudio();
+  if (ctx.state === "suspended") ctx.resume();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(220, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(820, ctx.currentTime + 0.35);
+  gain.gain.setValueAtTime(0.001, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.05);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.65);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + 0.7);
+}
+
+function playEndChirp() {
+  const ctx = ensureAudio();
+  if (ctx.state === "suspended") ctx.resume();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(640, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(180, ctx.currentTime + 0.4);
+  gain.gain.setValueAtTime(0.001, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.05);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + 0.5);
 }
 
 function updateTelemetry(data) {
@@ -269,8 +420,8 @@ function updateTelemetry(data) {
   updateEngineSound(normalized).catch(() => {});
 
   if (steeringValueEl) steeringValueEl.textContent = `${steeringValue}°`;
-  if (rawThrottleEl) rawThrottleEl.textContent = `${throttleRawResolved}`;
-  if (rawBrakeEl) rawBrakeEl.textContent = `${brakeRawResolved}`;
+  if (rawThrottleEl) rawThrottleEl.textContent = partyDebugEnabled ? `${throttleRawResolved}` : "--";
+  if (rawBrakeEl) rawBrakeEl.textContent = partyDebugEnabled ? `${brakeRawResolved}` : "--";
 }
 
 let currentDeviceIndex = 0;

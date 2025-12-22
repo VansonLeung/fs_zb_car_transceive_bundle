@@ -20,6 +20,7 @@ namespace RCCarController
         public bool PartyDayEnabled { get; private set; }
         public bool PartyDayAnyQr { get; private set; }
         public string? PartyDayScannerPort { get; private set; }
+        public bool PartyDayDebugEnabled { get; private set; }
 
         public void LoadSettings(ComboBox baudComboBox)
         {
@@ -35,6 +36,7 @@ namespace RCCarController
                 PartyDayEnabled = false;
                 PartyDayAnyQr = true;
                 PartyDayScannerPort = null;
+                PartyDayDebugEnabled = true;
                 
 
                 if (File.Exists(SETTINGS_FILE))
@@ -121,6 +123,12 @@ namespace RCCarController
                                 case "PartyDayScannerPort":
                                     PartyDayScannerPort = parts[1];
                                     break;
+                                case "PartyDayDebugEnabled":
+                                    if (bool.TryParse(parts[1], out var pdDebug))
+                                    {
+                                        PartyDayDebugEnabled = pdDebug;
+                                    }
+                                    break;
                             }
                         }
                     }
@@ -144,7 +152,8 @@ namespace RCCarController
             int? endIndex = null,
             bool? partyDayEnabled = null,
             bool? partyDayAnyQr = null,
-            string? partyDayScannerPort = null)
+            string? partyDayScannerPort = null,
+            bool? partyDayDebugEnabled = null)
         {
             try
             {
@@ -176,6 +185,8 @@ namespace RCCarController
                     PartyDayAnyQr = partyDayAnyQr.Value;
                 if (partyDayScannerPort != null)
                     PartyDayScannerPort = partyDayScannerPort;
+                if (partyDayDebugEnabled.HasValue)
+                    PartyDayDebugEnabled = partyDayDebugEnabled.Value;
 
                 WriteSettingsFile();
             }
@@ -203,6 +214,7 @@ namespace RCCarController
             settings.Add($"PartyDayAnyQr={PartyDayAnyQr}");
             if (!string.IsNullOrWhiteSpace(PartyDayScannerPort))
                 settings.Add($"PartyDayScannerPort={PartyDayScannerPort}");
+            settings.Add($"PartyDayDebugEnabled={PartyDayDebugEnabled}");
 
             File.WriteAllLines(SETTINGS_FILE, settings);
         }

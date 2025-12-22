@@ -119,6 +119,7 @@
                     <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" Margin="0,0,0,8">
                         <CheckBox x:Name="PartyDayModeToggle" Content="Enable PartyDay mode"/>
                         <CheckBox x:Name="AnyQrToggle" Content="Accept any QR as valid" IsChecked="True"/>
+                        <CheckBox x:Name="PartyDayDebugToggle" Content="Enable PartyDay debug" IsChecked="True"/>
                         <TextBlock x:Name="PartyDayStatusLabel" Text="Status: Disabled" VerticalAlignment="Center"/>
                     </StackPanel>
 

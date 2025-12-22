@@ -62,6 +62,7 @@ namespace RCCarController
         private bool partyDayEnabled = false;
         private bool partyDayAnyQr = true;
         private string? partyDayScannerPort;
+        private bool partyDayDebugEnabled = true;
         private bool neutralSentWhileLocked = false;
         private System.Timers.Timer? scannerReconnectTimer;
         private string? lastPartyDayMember;
@@ -139,6 +140,7 @@ namespace RCCarController
             manualQrTextBox = this.FindControl<TextBox>("ManualQrTextBox");
             simulateQrButton = this.FindControl<Button>("SimulateQrButton");
             membershipInfoLabel = this.FindControl<TextBlock>("MembershipInfoLabel");
+            var partyDayDebugToggle = this.FindControl<CheckBox>("PartyDayDebugToggle");
 
             // Wire up events
             if (steeringSlider != null) steeringSlider.ValueChanged += SteeringSlider_ValueChanged;
@@ -158,6 +160,7 @@ namespace RCCarController
             if (requestActiveMacButton != null) requestActiveMacButton.Click += RequestActiveMacButton_Click;
             if (partyDayModeToggle != null) partyDayModeToggle.IsCheckedChanged += PartyDayModeToggle_IsCheckedChanged;
             if (anyQrToggle != null) anyQrToggle.IsCheckedChanged += AnyQrToggle_IsCheckedChanged;
+            if (partyDayDebugToggle != null) partyDayDebugToggle.IsCheckedChanged += PartyDayDebugToggle_IsCheckedChanged;
             if (scannerRefreshButton != null) scannerRefreshButton.Click += ScannerRefreshButton_Click;
             if (scannerConnectButton != null) scannerConnectButton.Click += ScannerConnectButton_Click;
             if (endSessionButton != null) endSessionButton.Click += EndSessionButton_Click;
@@ -188,6 +191,7 @@ namespace RCCarController
             partyDayEnabled = settingsManager.PartyDayEnabled;
             partyDayAnyQr = settingsManager.PartyDayAnyQr;
             partyDayScannerPort = settingsManager.PartyDayScannerPort;
+            partyDayDebugEnabled = settingsManager.PartyDayDebugEnabled;
             if (startIndexNumeric != null) startIndexNumeric.Value = settingsManager.StartIndex;
             if (endIndexNumeric != null) endIndexNumeric.Value = settingsManager.EndIndex;
             if (activeIndexNumeric != null)
@@ -198,6 +202,7 @@ namespace RCCarController
 
             if (partyDayModeToggle != null) partyDayModeToggle.IsChecked = partyDayEnabled;
             if (anyQrToggle != null) anyQrToggle.IsChecked = partyDayAnyQr;
+            if (partyDayDebugToggle != null) partyDayDebugToggle.IsChecked = partyDayDebugEnabled;
             UpdatePartyDayStatus();
             RefreshScannerPorts();
             if (scannerPortComboBox != null && !string.IsNullOrWhiteSpace(partyDayScannerPort))
@@ -501,6 +506,13 @@ namespace RCCarController
             partyDayAnyQr = (sender as CheckBox)?.IsChecked ?? true;
             settingsManager.SaveSettings(partyDayAnyQr: partyDayAnyQr);
             BroadcastPartyDayState("anyqr-toggle");
+        }
+
+        private void PartyDayDebugToggle_IsCheckedChanged(object? sender, RoutedEventArgs e)
+        {
+            partyDayDebugEnabled = (sender as CheckBox)?.IsChecked ?? true;
+            settingsManager.SaveSettings(partyDayDebugEnabled: partyDayDebugEnabled);
+            BroadcastPartyDayState("debug-toggle");
         }
 
         private void ScannerRefreshButton_Click(object? sender, RoutedEventArgs e)
@@ -1274,13 +1286,16 @@ namespace RCCarController
 
         private void TryBroadcastControlEvent(int steering180, int throttle180)
         {
-            var rawSteeringValue = webSocketInputManager.LastRawSteering
-                ?? MapToRange(steering180, 0, 180, 0, 65535);
-            var rawThrottleValue = webSocketInputManager.LastRawThrottle
-                ?? MapToRange(throttle180, 0, 180, 0, 65535);
-            var rawBrakeValue = webSocketInputManager.LastRawBrake
-                ?? 0;
-            var brake180 = MapToRange(rawBrakeValue, 0, 65535, 0, 180);
+            var rawSteeringValue = partyDayDebugEnabled
+                ? (webSocketInputManager.LastRawSteering ?? MapToRange(steering180, 0, 180, 0, 65535))
+                : (int?)null;
+            var rawThrottleValue = partyDayDebugEnabled
+                ? (webSocketInputManager.LastRawThrottle ?? MapToRange(throttle180, 0, 180, 0, 65535))
+                : (int?)null;
+            var rawBrakeValue = partyDayDebugEnabled
+                ? (webSocketInputManager.LastRawBrake ?? 0)
+                : (int?)null;
+            var brake180 = rawBrakeValue.HasValue ? MapToRange(rawBrakeValue.Value, 0, 65535, 0, 180) : 0;
 
             if (lastBroadcastSteering == steering180 &&
                 lastBroadcastThrottle == throttle180 &&
@@ -1309,7 +1324,8 @@ namespace RCCarController
                 brake = brake180,
                 steeringRaw = rawSteeringValue,
                 throttleRaw = rawThrottleValue,
-                brakeRaw = rawBrakeValue
+                brakeRaw = rawBrakeValue,
+                debugEnabled = partyDayDebugEnabled
             };
 
             _ = eventServer.BroadcastAsync(payload);
@@ -1328,7 +1344,8 @@ namespace RCCarController
                 remainingMs = (long)Math.Max(0, partyDaySessionManager.Remaining.TotalMilliseconds),
                 anyQr = partyDayAnyQr,
                 scannerConnected = qrScannerManager.IsConnected,
-                scannerPort = partyDayScannerPort
+                scannerPort = partyDayScannerPort,
+                debugEnabled = partyDayDebugEnabled
             };
 
             _ = eventServer.BroadcastAsync(payload);
@@ -1350,7 +1367,8 @@ namespace RCCarController
                 modeEnabled = partyDayEnabled,
                 anyQr = partyDayAnyQr,
                 scannerConnected = qrScannerManager.IsConnected,
-                scannerPort = partyDayScannerPort
+                scannerPort = partyDayScannerPort,
+                debugEnabled = partyDayDebugEnabled
             };
 
             _ = eventServer.BroadcastAsync(payload);
