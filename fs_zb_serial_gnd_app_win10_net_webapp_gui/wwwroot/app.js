@@ -47,6 +47,7 @@ function connectWebSocket() {
   socket.addEventListener("message", (event) => {
     try {
       const payload = JSON.parse(event.data);
+      handlePartyDayEvent(payload);
       const normalized = normalizeTelemetryPayload(payload);
       if (normalized) {
         updateTelemetry(normalized);
@@ -196,6 +197,23 @@ function normalizeTelemetryPayload(payload) {
   }
 
   return null;
+}
+
+function handlePartyDayEvent(payload) {
+  if (!payload || typeof payload !== "object") return;
+  const type = payload.type;
+  if (typeof type !== "string") return;
+  if (!type.startsWith("partyday")) return;
+
+  try {
+    window.dispatchEvent(new CustomEvent("partyday", { detail: payload }));
+  } catch (err) {
+    console.warn("PartyDay event dispatch failed", err);
+  }
+
+  if (payload.action || payload.reason) {
+    console.log("PartyDay", type, payload.action || payload.reason, payload);
+  }
 }
 
 function updateTelemetry(data) {

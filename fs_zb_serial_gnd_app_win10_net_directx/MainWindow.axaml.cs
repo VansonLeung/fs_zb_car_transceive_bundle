@@ -64,6 +64,9 @@ namespace RCCarController
         private string? partyDayScannerPort;
         private bool neutralSentWhileLocked = false;
         private System.Timers.Timer? scannerReconnectTimer;
+        private string? lastPartyDayMember;
+        private string? lastPartyDayQr;
+        private string? lastPartyDaySource;
 
         // Transmit Timer
         private System.Timers.Timer? transmitTimer;
@@ -490,12 +493,14 @@ namespace RCCarController
             }
             UpdatePartyDayStatus();
             UpdateScannerReconnectTimerState();
+            BroadcastPartyDayState("mode-toggle");
         }
 
         private void AnyQrToggle_IsCheckedChanged(object? sender, RoutedEventArgs e)
         {
             partyDayAnyQr = (sender as CheckBox)?.IsChecked ?? true;
             settingsManager.SaveSettings(partyDayAnyQr: partyDayAnyQr);
+            BroadcastPartyDayState("anyqr-toggle");
         }
 
         private void ScannerRefreshButton_Click(object? sender, RoutedEventArgs e)
@@ -771,6 +776,7 @@ namespace RCCarController
                     membershipInfoLabel.Text = status;
                 }
             });
+            BroadcastPartyDayState("scanner-status");
         }
 
         private void OnQrScanned(string payload)
@@ -794,6 +800,9 @@ namespace RCCarController
 
         private void StartSessionForMember(string memberName, string payload, string source)
         {
+            lastPartyDayMember = memberName;
+            lastPartyDayQr = payload;
+            lastPartyDaySource = source;
             Dispatcher.UIThread.InvokeAsync(() =>
             {
                 if (membershipInfoLabel != null)
@@ -805,6 +814,8 @@ namespace RCCarController
             partyDaySessionManager.StartSession();
             LogMessage($"PartyDay session started for {memberName} (source: {source}).");
             UpdatePartyDayStatus();
+            BroadcastPartyDaySessionEvent("started", memberName, payload, source);
+            BroadcastPartyDayState("session-started");
         }
 
         private void OnPartyDaySessionStarted()
@@ -823,6 +834,8 @@ namespace RCCarController
                 }
             });
             UpdatePartyDayStatus();
+            BroadcastPartyDaySessionEvent("ended", lastPartyDayMember, lastPartyDayQr, lastPartyDaySource);
+            BroadcastPartyDayState("session-ended");
         }
 
         private void OnPartyDaySessionTick(TimeSpan remaining)
@@ -834,6 +847,7 @@ namespace RCCarController
                     sessionCountdownLabel.Text = $"Remaining: {remaining:mm\\:ss}";
                 }
             });
+            BroadcastPartyDaySessionEvent("tick", lastPartyDayMember, lastPartyDayQr, lastPartyDaySource);
         }
 
         private void ApplyRangeButton_Click(object? sender, RoutedEventArgs e)
@@ -1296,6 +1310,47 @@ namespace RCCarController
                 steeringRaw = rawSteeringValue,
                 throttleRaw = rawThrottleValue,
                 brakeRaw = rawBrakeValue
+            };
+
+            _ = eventServer.BroadcastAsync(payload);
+        }
+
+        private void BroadcastPartyDayState(string reason)
+        {
+            var payload = new
+            {
+                version = "1.0",
+                type = "partyday.state",
+                reason,
+                ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                modeEnabled = partyDayEnabled,
+                sessionActive = partyDaySessionManager.SessionActive,
+                remainingMs = (long)Math.Max(0, partyDaySessionManager.Remaining.TotalMilliseconds),
+                anyQr = partyDayAnyQr,
+                scannerConnected = qrScannerManager.IsConnected,
+                scannerPort = partyDayScannerPort
+            };
+
+            _ = eventServer.BroadcastAsync(payload);
+        }
+
+        private void BroadcastPartyDaySessionEvent(string action, string? member, string? qrPayload, string? source)
+        {
+            var payload = new
+            {
+                version = "1.0",
+                type = "partyday.session",
+                action,
+                ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                member,
+                qrPayload,
+                source,
+                sessionSeconds = partyDaySessionManager.SessionDurationSeconds,
+                remainingMs = (long)Math.Max(0, partyDaySessionManager.Remaining.TotalMilliseconds),
+                modeEnabled = partyDayEnabled,
+                anyQr = partyDayAnyQr,
+                scannerConnected = qrScannerManager.IsConnected,
+                scannerPort = partyDayScannerPort
             };
 
             _ = eventServer.BroadcastAsync(payload);
