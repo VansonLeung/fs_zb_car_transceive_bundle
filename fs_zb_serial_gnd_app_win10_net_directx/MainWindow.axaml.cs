@@ -1286,16 +1286,12 @@ namespace RCCarController
 
         private void TryBroadcastControlEvent(int steering180, int throttle180)
         {
-            var rawSteeringValue = partyDayDebugEnabled
-                ? (webSocketInputManager.LastRawSteering ?? MapToRange(steering180, 0, 180, 0, 65535))
-                : (int?)null;
-            var rawThrottleValue = partyDayDebugEnabled
-                ? (webSocketInputManager.LastRawThrottle ?? MapToRange(throttle180, 0, 180, 0, 65535))
-                : (int?)null;
-            var rawBrakeValue = partyDayDebugEnabled
-                ? (webSocketInputManager.LastRawBrake ?? 0)
-                : (int?)null;
-            var brake180 = rawBrakeValue.HasValue ? MapToRange(rawBrakeValue.Value, 0, 65535, 0, 180) : 0;
+            var rawSteeringValue = webSocketInputManager.LastRawSteering ?? MapToRange(steering180, 0, 180, 0, 65535);
+            var rawThrottleValue = webSocketInputManager.LastRawThrottle
+                ?? MapToRange(Math.Max(0, 90 - throttle180), 0, 90, 0, 65535); // neutral=0, forward increases
+            var rawBrakeValue = webSocketInputManager.LastRawBrake
+                ?? MapToRange(Math.Max(0, throttle180 - 90), 0, 90, 0, 65535); // neutral=0, brake increases
+            var brake180 = MapToRange(rawBrakeValue, 0, 65535, 0, 180);
 
             if (lastBroadcastSteering == steering180 &&
                 lastBroadcastThrottle == throttle180 &&

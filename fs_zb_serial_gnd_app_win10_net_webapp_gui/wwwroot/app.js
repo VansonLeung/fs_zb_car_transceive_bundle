@@ -34,6 +34,10 @@ let partyDebugEnabled = false;
 const engineStartAudio = new Audio("car_ignition.wav");
 engineStartAudio.preload = "auto";
 
+function isPartySessionActive() {
+  return !!(lastPartyState.modeEnabled && lastPartyState.sessionActive);
+}
+
 function applyDebugVisibility() {
   const hidden = !partyDebugEnabled;
   debugElements.forEach((el) => el.classList.toggle("debug-hidden", hidden));
@@ -155,6 +159,18 @@ async function startEngineLoop() {
   engineGain = gain;
 }
 
+function stopEngineLoop() {
+  if (engineSource) {
+    try { engineSource.stop(); } catch {}
+    engineSource.disconnect();
+  }
+  if (engineGain) {
+    try { engineGain.disconnect(); } catch {}
+  }
+  engineSource = null;
+  engineGain = null;
+}
+
 async function updateEngineSound(drivePercentSigned) {
   // drivePercentSigned: -1..1 where negative is reverse/back-drive
   const effort = clamp(Math.abs(drivePercentSigned), 0, 1);
@@ -195,13 +211,16 @@ function normalizeTelemetryPayload(payload) {
   if (!payload || typeof payload !== "object") return null;
 
   if (payload.type === "control" && payload.version) {
+    const steerDeg = toNumber(payload.steering, 90);
+    const throttleDeg = toNumber(payload.throttle, 90);
+    const brakeDeg = toNumber(payload.brake, 0);
     return {
-      steering180: toNumber(payload.steering),
-      throttle180: toNumber(payload.throttle),
-      brake180: toNumber(payload.brake),
-      steeringRaw: toNumber(payload.steeringRaw),
-      throttleRaw: toNumber(payload.throttleRaw),
-      brakeRaw: toNumber(payload.brakeRaw),
+      steering180: steerDeg,
+      throttle180: throttleDeg,
+      brake180: brakeDeg,
+      steeringRaw: toNumber(payload.steeringRaw, Math.round(mapRange(clamp(steerDeg ?? 90, 0, 180), 0, 180, 0, 65535))),
+      throttleRaw: toNumber(payload.throttleRaw, Math.round(mapRange(clamp(throttleDeg ?? 90, 0, 180), 0, 180, 0, 65535))),
+      brakeRaw: toNumber(payload.brakeRaw, Math.round(mapRange(clamp(brakeDeg ?? 0, 0, 180), 0, 180, 0, 65535))),
     };
   }
 
@@ -258,10 +277,12 @@ function renderPartyUi(payload) {
     if (action === "started") {
       showToast(qrPayload ? `QR VERIFIED (${source || "scanner"})` : "SESSION STARTED", false);
       playEngineStart();
+      startEngineLoop();
       pulseGlow();
     } else if (action === "ended") {
       showToast("SESSION ENDED", true);
       playEndChirp();
+      stopEngineLoop();
     } else if (action === "tick") {
       // keep timer fresh
     }
@@ -272,6 +293,10 @@ function renderPartyUi(payload) {
   }
 
   lastPartyState = { ...lastPartyState, ...payload };
+
+  if (!isPartySessionActive()) {
+    stopEngineLoop();
+  }
 }
 
 function updateBadge(modeEnabled, sessionActive, context) {
@@ -330,13 +355,6 @@ function pulseGlow() {
   partyGlow.style.animation = "slow-glow 6s ease-in-out infinite, flash-green 0.6s ease";
 }
 
-function ensureAudio() {
-  if (audioCtx) return audioCtx;
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  audioCtx = ctx;
-  return ctx;
-}
-
 function playEngineStart() {
   try {
     engineStartAudio.currentTime = 0;
@@ -382,18 +400,10 @@ function updateTelemetry(data) {
     : Math.round(mapRange(clamp(data.brake180 ?? 0, 0, 180), 0, 180, 0, 65535));
 
   const netInput = clamp(throttleRawResolved - brakeRawResolved, -65535, 65535);
-  const normalized = netInput / 65535;
-  const throttleValueFromRaw = Math.round(clamp(90 - normalized * 90, 0, 180));
+  const normalized = netInput / 65535; // -1..1 using raw inputs
 
-  const throttleValue = Number.isFinite(data.throttle180)
-    ? Math.round(clamp(data.throttle180, 0, 180))
-    : throttleValueFromRaw;
-
-  const steeringValue = Number.isFinite(data.steering180)
-    ? Math.round(clamp(data.steering180, 0, 180))
-    : Math.round(mapRange(steeringRawResolved, 0, 65535, 0, 180));
-
-  const forwardPercent = clamp((90 - throttleValue) / 90, 0, 1);
+  const steeringValue = Math.round(mapRange(steeringRawResolved, 0, 65535, 0, 180));
+  const forwardPercent = clamp(normalized, 0, 1);
   const speedKph = Math.round(forwardPercent * 150);
 
   // Update Speed Gauge
@@ -416,7 +426,12 @@ function updateTelemetry(data) {
     brakeBar.style.height = `${brakePercent * 100}%`;
   }
 
-  updateEngineSound(normalized).catch(() => {});
+  if (isPartySessionActive()) {
+    if (!engineSource) startEngineLoop();
+    updateEngineSound(normalized).catch(() => {});
+  } else {
+    stopEngineLoop();
+  }
 
   if (steeringValueEl) steeringValueEl.textContent = `${steeringValue}°`;
   if (rawThrottleEl) rawThrottleEl.textContent = partyDebugEnabled ? `${throttleRawResolved}` : "--";
