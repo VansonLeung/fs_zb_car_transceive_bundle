@@ -33,7 +33,14 @@ cd /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_zb_serial_gnd
 
 cd /Users/van/Documents/projects/fs/VanHIDDevices/HIDDeviceMonitor && dotnet publish HIDDeviceMonitor.csproj -c Release -r win-x64 --self-contained true /p:GenerateFullPaths=true /p:PublishSingleFile=true -o /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_output/win-x64/rc_hid_monitor
 
+cd /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_launcher && dotnet publish -c Release -r win-x64 --self-contained false /p:PublishSingleFile=true /p:GenerateFullPaths=true -o /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_output
+
 After publishing, you can start all Windows apps with: `fs_output/run-win-x64.cmd` (launches HID Monitor, Ground app, Web GUI, then GUI Launcher with 5s gaps).
+
+### Windows autorun helper
+
+- `fs_output/setup_autorun.cmd`: registers a Scheduled Task to run `run-win-x64.cmd` at logon (run as Administrator).
+- `fs_output/fs_launcher/` (dotnet 8): build/publish `fs.exe` which launches `run-win-x64.cmd`. Supports `--install` / `--uninstall` to add/remove HKCU Run entry for startup.
 
 ```
 

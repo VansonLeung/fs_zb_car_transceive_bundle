@@ -2,6 +2,10 @@
 #include <espnow.h>
 #include <Servo.h>
 #include <cstring>
+#include <EEPROM.h>
+extern "C" {
+#include <user_interface.h>
+}
 
 // Pin definitions
 constexpr uint8_t SERVO_PIN = D1;  // Steering servo
@@ -19,6 +23,11 @@ constexpr int STEERING_STEP = 20;
 constexpr int THROTTLE_STEP = 5;
 constexpr uint32_t FAILSAFE_TIMEOUT_MS = 500;  // Neutral if no packets within 0.5s
 
+// MAC index persistence
+constexpr uint16_t EEPROM_MAGIC = 0xA55A;
+constexpr uint16_t EEPROM_ADDR_MAGIC = 0;
+constexpr uint16_t EEPROM_ADDR_INDEX = 2;
+
 // ESP-NOW payload signature to reject random noise
 constexpr uint16_t CONTROL_MAGIC = 0xF5A5;
 
@@ -31,6 +40,14 @@ struct ControlPacket {
 
 Servo steeringServo;
 Servo escMotor;
+
+// Serial command buffer (for AT+INDEX)
+constexpr size_t CMD_BUFFER_SIZE = 64;
+char cmdBuffer[CMD_BUFFER_SIZE];
+size_t cmdBufferIndex = 0;
+bool cmdComplete = false;
+
+int macIndex = 0;
 
 volatile int targetSteeringValue = DEFAULT_STEERING;
 volatile int targetThrottleValue = DEFAULT_THROTTLE;
@@ -45,6 +62,11 @@ void applyTargets(int desiredSteering, int desiredThrottle);
 void engageFailsafe();
 void setTargetsSafely(int steering, int throttle);
 void onDataRecv(uint8_t* mac, uint8_t* incomingData, uint8_t len);
+void processCommand(char* command);
+void setMacAddress(uint8_t idx);
+void applyMacIndex();
+void loadMacIndex();
+void saveMacIndex();
 
 void setup() {
   Serial.begin(115200);
@@ -58,8 +80,12 @@ void setup() {
   pinMode(STATUS_LED_PIN, OUTPUT);
   digitalWrite(STATUS_LED_PIN, HIGH);
 
+  EEPROM.begin(8);
+  loadMacIndex();
+
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
+  applyMacIndex();
   Serial.print("Local MAC: ");
   Serial.println(WiFi.macAddress());
 
@@ -77,6 +103,25 @@ void setup() {
 }
 
 void loop() {
+  // Non-blocking serial command handling for AT+INDEX=n
+  while (Serial.available() > 0) {
+    char incoming = Serial.read();
+    if (incoming == '\n' || incoming == '\r') {
+      if (cmdBufferIndex > 0) {
+        cmdBuffer[cmdBufferIndex] = '\0';
+        cmdComplete = true;
+      }
+    } else if (cmdBufferIndex < CMD_BUFFER_SIZE - 1) {
+      cmdBuffer[cmdBufferIndex++] = incoming;
+    }
+  }
+
+  if (cmdComplete) {
+    processCommand(cmdBuffer);
+    cmdBufferIndex = 0;
+    cmdComplete = false;
+  }
+
   bool localDirty = false;
   int desiredSteering = currentSteeringValue;
   int desiredThrottle = currentThrottleValue;
@@ -158,6 +203,53 @@ void engageFailsafe() {
   }
   digitalWrite(STATUS_LED_PIN, HIGH);
   setTargetsSafely(DEFAULT_STEERING, DEFAULT_THROTTLE);
+}
+
+void processCommand(char* command) {
+  // AT command: AT+INDEX=<n>
+  if (strncmp(command, "AT+INDEX=", 9) == 0) {
+    int idx = atoi(command + 9);
+    if (idx >= 0 && idx <= 255) {
+      macIndex = idx;
+      saveMacIndex();
+      applyMacIndex();
+      Serial.print("OK:INDEX ");
+      Serial.println(macIndex);
+    } else {
+      Serial.println("ERR:INDEX_RANGE");
+    }
+    return;
+  }
+}
+
+void setMacAddress(uint8_t idx) {
+  uint8_t mac[6] = {0x66, 0x33, 0x9F, 0x00, 0x00, idx};
+  wifi_set_macaddr(STATION_IF, mac);
+  char buf[24];
+  snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  Serial.print("MAC set to ");
+  Serial.println(buf);
+}
+
+void applyMacIndex() {
+  setMacAddress(static_cast<uint8_t>(macIndex));
+}
+
+void loadMacIndex() {
+  uint16_t magic = 0;
+  EEPROM.get(EEPROM_ADDR_MAGIC, magic);
+  if (magic == EEPROM_MAGIC) {
+    uint8_t idx = 0;
+    EEPROM.get(EEPROM_ADDR_INDEX, idx);
+    macIndex = idx;
+  }
+}
+
+void saveMacIndex() {
+  EEPROM.put(EEPROM_ADDR_MAGIC, EEPROM_MAGIC);
+  uint8_t idx = static_cast<uint8_t>(macIndex);
+  EEPROM.put(EEPROM_ADDR_INDEX, idx);
+  EEPROM.commit();
 }
 
 void setTargetsSafely(int steering, int throttle) {

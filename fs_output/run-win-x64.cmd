@@ -2,7 +2,8 @@
 setlocal
 title RC Bundle Launcher (win-x64)
 
-set ROOT=%~dp0win-x64
+:: Resolve ROOT to the folder where this script lives, then append win-x64
+for %%i in ("%~dp0.") do set "ROOT=%%~fi\win-x64"
 
 set HID=%ROOT%\rc_hid_monitor\HIDDeviceMonitor.exe
 set GND=%ROOT%\rc_gnd\RCCarController.exe
@@ -22,30 +23,30 @@ timeout /t 5 /nobreak >nul
 
 if exist "%GND%" (
   echo Starting Ground app...
-  start "GND" "%GND%"
+  start "GND" /d "%ROOT%\rc_gnd" "%GND%"
 ) else (
   echo Ground app not found at %GND%
 )
 
 timeout /t 5 /nobreak >nul
 
-if exist "%GUI%" (
-  echo Starting Web GUI (Kestrel)...
-  set "ASPNETCORE_CONTENTROOT=%GUI_DIR%"
-  start "GUI" /d "%GUI_DIR%" "%GUI%"
-  set "ASPNETCORE_CONTENTROOT="
-) else (
-  echo Web GUI not found at %GUI%
-)
+@REM if exist "%GUI%" (
+@REM   echo Starting Web GUI (Kestrel)...
+@REM   set "ASPNETCORE_CONTENTROOT=%GUI_DIR%"
+@REM   start "GUI" /d "%GUI_DIR%" "%GUI%"
+@REM   set "ASPNETCORE_CONTENTROOT="
+@REM ) else (
+@REM   echo Web GUI not found at %GUI%
+@REM )
 
-timeout /t 5 /nobreak >nul
+@REM timeout /t 5 /nobreak >nul
 
-if exist "%GUI_LAUNCHER%" (
-  echo Starting GUI Launcher (WebView2)...
-  start "GUI_LAUNCHER" "%GUI_LAUNCHER%"
-) else (
-  echo GUI Launcher not found at %GUI_LAUNCHER%
-)
+@REM if exist "%GUI_LAUNCHER%" (
+@REM   echo Starting GUI Launcher (WebView2)...
+@REM   start "GUI_LAUNCHER" "%GUI_LAUNCHER%"
+@REM ) else (
+@REM   echo GUI Launcher not found at %GUI_LAUNCHER%
+@REM )
 
 echo Done.
 endlocal

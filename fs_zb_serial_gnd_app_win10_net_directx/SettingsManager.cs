@@ -15,6 +15,10 @@ namespace RCCarController
         public bool ReverseThrottleInput { get; private set; }
         public bool AutoConnectSerial { get; private set; }
         public int SteeringOffset { get; private set; }
+        public int SteeringStepLimit { get; private set; }
+        public int ThrottleStepLimit { get; private set; }
+        public List<ControlMappingRange> ThrottleMappings { get; private set; } = new List<ControlMappingRange>();
+        public List<ControlMappingRange> SteeringMappings { get; private set; } = new List<ControlMappingRange>();
         public int StartIndex { get; private set; }
         public int EndIndex { get; private set; }
         public bool PartyDayEnabled { get; private set; }
@@ -31,6 +35,16 @@ namespace RCCarController
                 ReverseThrottleInput = false;
                 AutoConnectSerial = false;
                 SteeringOffset = 0;
+                SteeringStepLimit = 180;
+                ThrottleStepLimit = 180;
+                ThrottleMappings = new List<ControlMappingRange>
+                {
+                    new ControlMappingRange(0, 180, 0, 180)
+                };
+                SteeringMappings = new List<ControlMappingRange>
+                {
+                    new ControlMappingRange(0, 180, 0, 180)
+                };
                 StartIndex = 0;
                 EndIndex = 0;
                 PartyDayEnabled = false;
@@ -96,6 +110,50 @@ namespace RCCarController
                                         SteeringOffset = offset;
                                     }
                                     break;
+                                case "SteeringStepLimit":
+                                    if (int.TryParse(parts[1], out var steeringStep))
+                                    {
+                                        SteeringStepLimit = steeringStep;
+                                    }
+                                    break;
+                                case "ThrottleStepLimit":
+                                    if (int.TryParse(parts[1], out var throttleStep))
+                                    {
+                                        ThrottleStepLimit = throttleStep;
+                                    }
+                                    break;
+                                case "ThrottleMappings":
+                                    var throttleMappings = new List<ControlMappingRange>();
+                                    var throttleMappingStrs = parts[1].Split('|');
+                                    foreach (var mappingStr in throttleMappingStrs)
+                                    {
+                                        var mapping = ControlMappingRange.FromSettingsString(mappingStr);
+                                        if (mapping != null)
+                                        {
+                                            throttleMappings.Add(mapping);
+                                        }
+                                    }
+                                    if (throttleMappings.Count > 0)
+                                    {
+                                        ThrottleMappings = throttleMappings;
+                                    }
+                                    break;
+                                case "SteeringMappings":
+                                    var steeringMappings = new List<ControlMappingRange>();
+                                    var steeringMappingStrs = parts[1].Split('|');
+                                    foreach (var mappingStr in steeringMappingStrs)
+                                    {
+                                        var mapping = ControlMappingRange.FromSettingsString(mappingStr);
+                                        if (mapping != null)
+                                        {
+                                            steeringMappings.Add(mapping);
+                                        }
+                                    }
+                                    if (steeringMappings.Count > 0)
+                                    {
+                                        SteeringMappings = steeringMappings;
+                                    }
+                                    break;
                                 case "StartIndex":
                                     if (int.TryParse(parts[1], out var sIdx))
                                     {
@@ -148,6 +206,10 @@ namespace RCCarController
             bool? reverseThrottle = null,
             bool? autoConnectSerial = null,
             int? steeringOffset = null,
+            int? steeringStepLimit = null,
+            int? throttleStepLimit = null,
+            List<ControlMappingRange>? throttleMappings = null,
+            List<ControlMappingRange>? steeringMappings = null,
             int? startIndex = null,
             int? endIndex = null,
             bool? partyDayEnabled = null,
@@ -175,6 +237,14 @@ namespace RCCarController
                     AutoConnectSerial = autoConnectSerial.Value;
                 if (steeringOffset.HasValue)
                     SteeringOffset = steeringOffset.Value;
+                if (steeringStepLimit.HasValue)
+                    SteeringStepLimit = steeringStepLimit.Value;
+                if (throttleStepLimit.HasValue)
+                    ThrottleStepLimit = throttleStepLimit.Value;
+                if (throttleMappings != null && throttleMappings.Count > 0)
+                    ThrottleMappings = throttleMappings;
+                if (steeringMappings != null && steeringMappings.Count > 0)
+                    SteeringMappings = steeringMappings;
                 if (startIndex.HasValue)
                     StartIndex = startIndex.Value;
                 if (endIndex.HasValue)
@@ -208,6 +278,18 @@ namespace RCCarController
             settings.Add($"ReverseThrottle={ReverseThrottleInput}");
             settings.Add($"AutoConnectSerial={AutoConnectSerial}");
             settings.Add($"SteeringOffset={SteeringOffset}");
+            settings.Add($"SteeringStepLimit={SteeringStepLimit}");
+            settings.Add($"ThrottleStepLimit={ThrottleStepLimit}");
+            if (ThrottleMappings.Count > 0)
+            {
+                var mappingStr = string.Join("|", ThrottleMappings.Select(m => m.ToSettingsString()));
+                settings.Add($"ThrottleMappings={mappingStr}");
+            }
+            if (SteeringMappings.Count > 0)
+            {
+                var mappingStr = string.Join("|", SteeringMappings.Select(m => m.ToSettingsString()));
+                settings.Add($"SteeringMappings={mappingStr}");
+            }
             settings.Add($"StartIndex={StartIndex}");
             settings.Add($"EndIndex={EndIndex}");
             settings.Add($"PartyDayEnabled={PartyDayEnabled}");

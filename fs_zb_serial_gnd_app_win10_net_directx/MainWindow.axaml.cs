@@ -29,6 +29,10 @@ namespace RCCarController
         private int throttleValue = 90;  // 0-180 (neutral)
         private bool isDrivingMode = false;
         private int steeringOffset = 0;
+        private int steeringStepLimit = 180;
+        private int throttleStepLimit = 180;
+        private List<ControlMappingRange> throttleMappings = new List<ControlMappingRange> { new ControlMappingRange(0, 180, 0, 180) };
+        private List<ControlMappingRange> steeringMappings = new List<ControlMappingRange> { new ControlMappingRange(0, 180, 0, 180) };
         private bool webSocketClientEnabled = true;
         private bool reverseSteeringInput = false;
         private bool reverseThrottleInput = false;
@@ -38,6 +42,26 @@ namespace RCCarController
         private NumericUpDown? startIndexNumeric;
         private NumericUpDown? endIndexNumeric;
         private NumericUpDown? activeIndexNumeric;
+        private NumericUpDown? steeringStepLimitNumeric;
+        private NumericUpDown? throttleStepLimitNumeric;
+        private ListBox? throttleMappingListBox;
+        private ListBox? steeringMappingListBox;
+        private TextBox? newInputMinTextBox;
+        private TextBox? newInputMaxTextBox;
+        private TextBox? newOutputMinTextBox;
+        private TextBox? newOutputMaxTextBox;
+        private TextBox? newSteeringInputMinTextBox;
+        private TextBox? newSteeringInputMaxTextBox;
+        private TextBox? newSteeringOutputMinTextBox;
+        private TextBox? newSteeringOutputMaxTextBox;
+        private Button? addMappingButton;
+        private Button? removeMappingButton;
+        private Button? clearMappingsButton;
+        private Button? resetDefaultMappingButton;
+        private Button? addSteeringMappingButton;
+        private Button? removeSteeringMappingButton;
+        private Button? clearSteeringMappingsButton;
+        private Button? resetDefaultSteeringMappingButton;
         private TextBlock? activeMacDisplayLabel;
         private Button? applyRangeButton;
         private Button? setActiveButton;
@@ -78,6 +102,9 @@ namespace RCCarController
         private int? lastBroadcastSteeringRaw;
         private int? lastBroadcastThrottleRaw;
         private int? lastBroadcastBrakeRaw;
+        private bool hasLastSentOutputs = false;
+        private int lastSentSteering = 90;
+        private int lastSentThrottle = 90;
 
         public MainWindow()
         {
@@ -118,6 +145,26 @@ namespace RCCarController
             var baudComboBox = this.FindControl<ComboBox>("BaudComboBox");
             var drivingModeToggle = this.FindControl<CheckBox>("DrivingModeToggle");
             var steeringOffsetNumeric = this.FindControl<NumericUpDown>("SteeringOffsetNumeric");
+            steeringStepLimitNumeric = this.FindControl<NumericUpDown>("SteeringStepLimitNumeric");
+            throttleStepLimitNumeric = this.FindControl<NumericUpDown>("ThrottleStepLimitNumeric");
+            throttleMappingListBox = this.FindControl<ListBox>("ThrottleMappingListBox");
+            steeringMappingListBox = this.FindControl<ListBox>("SteeringMappingListBox");
+            newInputMinTextBox = this.FindControl<TextBox>("NewInputMinTextBox");
+            newInputMaxTextBox = this.FindControl<TextBox>("NewInputMaxTextBox");
+            newOutputMinTextBox = this.FindControl<TextBox>("NewOutputMinTextBox");
+            newOutputMaxTextBox = this.FindControl<TextBox>("NewOutputMaxTextBox");
+            newSteeringInputMinTextBox = this.FindControl<TextBox>("NewSteeringInputMinTextBox");
+            newSteeringInputMaxTextBox = this.FindControl<TextBox>("NewSteeringInputMaxTextBox");
+            newSteeringOutputMinTextBox = this.FindControl<TextBox>("NewSteeringOutputMinTextBox");
+            newSteeringOutputMaxTextBox = this.FindControl<TextBox>("NewSteeringOutputMaxTextBox");
+            addMappingButton = this.FindControl<Button>("AddMappingButton");
+            removeMappingButton = this.FindControl<Button>("RemoveMappingButton");
+            clearMappingsButton = this.FindControl<Button>("ClearMappingsButton");
+            resetDefaultMappingButton = this.FindControl<Button>("ResetDefaultMappingButton");
+            addSteeringMappingButton = this.FindControl<Button>("AddSteeringMappingButton");
+            removeSteeringMappingButton = this.FindControl<Button>("RemoveSteeringMappingButton");
+            clearSteeringMappingsButton = this.FindControl<Button>("ClearSteeringMappingsButton");
+            resetDefaultSteeringMappingButton = this.FindControl<Button>("ResetDefaultSteeringMappingButton");
             var webSocketToggle = this.FindControl<CheckBox>("WebSocketToggle");
             var reverseSteeringToggle = this.FindControl<CheckBox>("ReverseSteeringToggle");
             var reverseThrottleToggle = this.FindControl<CheckBox>("ReverseThrottleToggle");
@@ -151,6 +198,16 @@ namespace RCCarController
             if (connectButton != null) connectButton.Click += ConnectButton_Click;
             if (drivingModeToggle != null) drivingModeToggle.IsCheckedChanged += DrivingModeToggle_IsCheckedChanged;
             if (steeringOffsetNumeric != null) steeringOffsetNumeric.ValueChanged += SteeringOffsetNumeric_ValueChanged;
+            if (steeringStepLimitNumeric != null) steeringStepLimitNumeric.ValueChanged += SteeringStepLimitNumeric_ValueChanged;
+            if (throttleStepLimitNumeric != null) throttleStepLimitNumeric.ValueChanged += ThrottleStepLimitNumeric_ValueChanged;
+            if (addMappingButton != null) addMappingButton.Click += AddMappingButton_Click;
+            if (removeMappingButton != null) removeMappingButton.Click += RemoveMappingButton_Click;
+            if (clearMappingsButton != null) clearMappingsButton.Click += ClearMappingsButton_Click;
+            if (resetDefaultMappingButton != null) resetDefaultMappingButton.Click += ResetDefaultMappingButton_Click;
+            if (addSteeringMappingButton != null) addSteeringMappingButton.Click += AddSteeringMappingButton_Click;
+            if (removeSteeringMappingButton != null) removeSteeringMappingButton.Click += RemoveSteeringMappingButton_Click;
+            if (clearSteeringMappingsButton != null) clearSteeringMappingsButton.Click += ClearSteeringMappingsButton_Click;
+            if (resetDefaultSteeringMappingButton != null) resetDefaultSteeringMappingButton.Click += ResetDefaultSteeringMappingButton_Click;
             if (webSocketToggle != null) webSocketToggle.IsCheckedChanged += WebSocketToggle_IsCheckedChanged;
             if (reverseSteeringToggle != null) reverseSteeringToggle.IsCheckedChanged += ReverseSteeringToggle_IsCheckedChanged;
             if (reverseThrottleToggle != null) reverseThrottleToggle.IsCheckedChanged += ReverseThrottleToggle_IsCheckedChanged;
@@ -188,6 +245,10 @@ namespace RCCarController
             reverseThrottleInput = settingsManager.ReverseThrottleInput;
             autoConnectSerial = settingsManager.AutoConnectSerial;
             steeringOffset = settingsManager.SteeringOffset;
+            steeringStepLimit = Math.Clamp(settingsManager.SteeringStepLimit, 1, 180);
+            throttleStepLimit = Math.Clamp(settingsManager.ThrottleStepLimit, 1, 180);
+            throttleMappings = settingsManager.ThrottleMappings;
+            steeringMappings = settingsManager.SteeringMappings;
             partyDayEnabled = settingsManager.PartyDayEnabled;
             partyDayAnyQr = settingsManager.PartyDayAnyQr;
             partyDayScannerPort = settingsManager.PartyDayScannerPort;
@@ -215,6 +276,10 @@ namespace RCCarController
             if (reverseThrottleToggle != null) reverseThrottleToggle.IsChecked = reverseThrottleInput;
             if (autoConnectToggle != null) autoConnectToggle.IsChecked = autoConnectSerial;
             if (steeringOffsetNumeric != null) steeringOffsetNumeric.Value = steeringOffset;
+            if (steeringStepLimitNumeric != null) steeringStepLimitNumeric.Value = steeringStepLimit;
+            if (throttleStepLimitNumeric != null) throttleStepLimitNumeric.Value = throttleStepLimit;
+            RefreshMappingListBox(throttleMappingListBox, throttleMappings);
+            RefreshMappingListBox(steeringMappingListBox, steeringMappings);
 
             StartEventServer();
             // Now safe to refresh ports
@@ -367,26 +432,29 @@ namespace RCCarController
                     gameControllerManager.Poll();
                 }
 
-                // Send command
-                int effectiveSteering = Math.Clamp(ApplySteeringDirection(steeringValue) + steeringOffset, 0, 180);
-                int effectiveThrottle = Math.Clamp(ApplyThrottleDirection(throttleValue), 0, 180);
+                // Prepare outputs (mapping + delta limiting)
+                var outputs = ComputeOutputs(applyDeltaLimit: true, updateDeltaState: true);
 
                 if (partyDayEnabled && !partyDaySessionManager.SessionActive)
                 {
                     if (!neutralSentWhileLocked)
                     {
+                        hasLastSentOutputs = true;
+                        lastSentSteering = 90;
+                        lastSentThrottle = 90;
                         serialManager.SendCommand(90, 90);
                         neutralSentWhileLocked = true;
                         UpdateLatestMessageLabel("Locked by PartyDay");
+                        TryBroadcastControlEvent(90, 90);
                     }
                     return;
                 }
 
                 neutralSentWhileLocked = false;
 
-                serialManager.SendCommand(effectiveSteering, effectiveThrottle);
+                serialManager.SendCommand(outputs.steering, outputs.throttle);
                 UpdateLatestMessageLabel(serialManager.LatestMessage);
-                TryBroadcastControlEvent(effectiveSteering, effectiveThrottle);
+                TryBroadcastControlEvent(outputs.steering, outputs.throttle);
             }
         }
 
@@ -586,6 +654,146 @@ namespace RCCarController
             UpdateSteeringOffsetLabel();
             settingsManager.SaveSettings(steeringOffset: steeringOffset);
             UpdateSteeringUI();
+        }
+
+        private void SteeringStepLimitNumeric_ValueChanged(object? sender, Avalonia.Controls.NumericUpDownValueChangedEventArgs e)
+        {
+            steeringStepLimit = (int)Math.Clamp(e.NewValue ?? steeringStepLimit, 1, 180);
+            settingsManager.SaveSettings(steeringStepLimit: steeringStepLimit);
+        }
+
+        private void ThrottleStepLimitNumeric_ValueChanged(object? sender, Avalonia.Controls.NumericUpDownValueChangedEventArgs e)
+        {
+            throttleStepLimit = (int)Math.Clamp(e.NewValue ?? throttleStepLimit, 1, 180);
+            settingsManager.SaveSettings(throttleStepLimit: throttleStepLimit);
+        }
+
+        private void AddMappingButton_Click(object? sender, RoutedEventArgs e)
+        {
+            var inputMin = ParseInput(newInputMinTextBox, 0);
+            var inputMax = ParseInput(newInputMaxTextBox, 180);
+            var outputMin = ParseInput(newOutputMinTextBox, 0);
+            var outputMax = ParseInput(newOutputMaxTextBox, 180);
+
+            if (inputMin > inputMax)
+            {
+                LogMessage($"Invalid input range: {inputMin} > {inputMax}");
+                return;
+            }
+
+            var newMapping = new ControlMappingRange(inputMin, inputMax, outputMin, outputMax);
+            throttleMappings.Add(newMapping);
+            settingsManager.SaveSettings(throttleMappings: throttleMappings);
+            RefreshMappingListBox(throttleMappingListBox, throttleMappings);
+            LogMessage($"Added mapping: {newMapping}");
+        }
+
+        private void RemoveMappingButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (throttleMappingListBox?.SelectedItem is ControlMappingRange selected)
+            {
+                throttleMappings.Remove(selected);
+                settingsManager.SaveSettings(throttleMappings: throttleMappings);
+                RefreshMappingListBox(throttleMappingListBox, throttleMappings);
+                LogMessage($"Removed mapping: {selected}");
+            }
+        }
+
+        private void ClearMappingsButton_Click(object? sender, RoutedEventArgs e)
+        {
+            throttleMappings.Clear();
+            settingsManager.SaveSettings(throttleMappings: throttleMappings);
+            RefreshMappingListBox(throttleMappingListBox, throttleMappings);
+            LogMessage("Cleared all throttle mappings");
+        }
+
+        private void ResetDefaultMappingButton_Click(object? sender, RoutedEventArgs e)
+        {
+            throttleMappings = new List<ControlMappingRange> { new ControlMappingRange(0, 180, 0, 180) };
+            settingsManager.SaveSettings(throttleMappings: throttleMappings);
+            RefreshMappingListBox(throttleMappingListBox, throttleMappings);
+            LogMessage("Reset to default mapping [0-180] → [0-180]");
+        }
+
+        private void AddSteeringMappingButton_Click(object? sender, RoutedEventArgs e)
+        {
+            var inputMin = ParseInput(newSteeringInputMinTextBox, 0);
+            var inputMax = ParseInput(newSteeringInputMaxTextBox, 180);
+            var outputMin = ParseInput(newSteeringOutputMinTextBox, 0);
+            var outputMax = ParseInput(newSteeringOutputMaxTextBox, 180);
+
+            if (inputMin > inputMax)
+            {
+                LogMessage($"Invalid steering input range: {inputMin} > {inputMax}");
+                return;
+            }
+
+            var newMapping = new ControlMappingRange(inputMin, inputMax, outputMin, outputMax);
+            steeringMappings.Add(newMapping);
+            settingsManager.SaveSettings(steeringMappings: steeringMappings);
+            RefreshMappingListBox(steeringMappingListBox, steeringMappings);
+            LogMessage($"Added steering mapping: {newMapping}");
+        }
+
+        private void RemoveSteeringMappingButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (steeringMappingListBox?.SelectedItem is ControlMappingRange selected)
+            {
+                steeringMappings.Remove(selected);
+                settingsManager.SaveSettings(steeringMappings: steeringMappings);
+                RefreshMappingListBox(steeringMappingListBox, steeringMappings);
+                LogMessage($"Removed steering mapping: {selected}");
+            }
+        }
+
+        private void ClearSteeringMappingsButton_Click(object? sender, RoutedEventArgs e)
+        {
+            steeringMappings.Clear();
+            settingsManager.SaveSettings(steeringMappings: steeringMappings);
+            RefreshMappingListBox(steeringMappingListBox, steeringMappings);
+            LogMessage("Cleared all steering mappings");
+        }
+
+        private void ResetDefaultSteeringMappingButton_Click(object? sender, RoutedEventArgs e)
+        {
+            steeringMappings = new List<ControlMappingRange> { new ControlMappingRange(0, 180, 0, 180) };
+            settingsManager.SaveSettings(steeringMappings: steeringMappings);
+            RefreshMappingListBox(steeringMappingListBox, steeringMappings);
+            LogMessage("Reset steering mapping to [0-180] → [0-180]");
+        }
+
+        private int ParseInput(TextBox? textBox, int defaultValue)
+        {
+            if (textBox == null)
+            {
+                return defaultValue;
+            }
+
+            var text = textBox.Text?.Trim();
+            if (int.TryParse(text, out var parsed))
+            {
+                parsed = Math.Clamp(parsed, 0, 180);
+                textBox.Text = parsed.ToString();
+                return parsed;
+            }
+
+            textBox.Text = defaultValue.ToString();
+            return defaultValue;
+        }
+
+        private void RefreshMappingListBox(ListBox? listBox, List<ControlMappingRange> mappings)
+        {
+            if (listBox == null)
+                return;
+
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                listBox.Items.Clear();
+                foreach (var mapping in mappings)
+                {
+                    listBox.Items.Add(mapping);
+                }
+            });
         }
 
         private void UpdateSteeringUI()
@@ -1010,9 +1218,7 @@ namespace RCCarController
             UpdateThrottleUI();
             isUpdatingFromWebSocket = false;
 
-            var effectiveSteering = Math.Clamp(ApplySteeringDirection(steeringValue) + steeringOffset, 0, 180);
-            var effectiveThrottle = Math.Clamp(ApplyThrottleDirection(throttleValue), 0, 180);
-            TryBroadcastControlEvent(effectiveSteering, effectiveThrottle);
+            BroadcastCurrentOutputsPreview();
         }
 
         private void UpdateLatestMessageLabel(string message)
@@ -1076,9 +1282,7 @@ namespace RCCarController
             UpdateSteeringUI();
             UpdateThrottleUI();
 
-            var effectiveSteering = Math.Clamp(ApplySteeringDirection(steeringValue) + steeringOffset, 0, 180);
-            var effectiveThrottle = Math.Clamp(ApplyThrottleDirection(throttleValue), 0, 180);
-            TryBroadcastControlEvent(effectiveSteering, effectiveThrottle);
+            BroadcastCurrentOutputsPreview();
         }
 
         private void RefreshButton_Click(object? sender, RoutedEventArgs e)
@@ -1168,8 +1372,6 @@ namespace RCCarController
 
                     LogMessage($"Connected to {portName} at {baudRateStr} baud");
                     settingsManager.SaveSettings(portName, baudComboBox.SelectedItem);
-                    ApplyRangeToGround();
-                    SetActiveIndexOnGround();
                     RequestActiveMacFromGround();
                 }
                 else
@@ -1205,6 +1407,9 @@ namespace RCCarController
 
             serialManager.Disconnect();
             transmitTimer?.Stop();
+            hasLastSentOutputs = false;
+            lastSentSteering = 90;
+            lastSentThrottle = 90;
             if (connectButton != null) connectButton.Content = "Connect";
             if (statusLabel != null)
             {
@@ -1266,6 +1471,106 @@ namespace RCCarController
             return reverseThrottleInput ? 180 - value : value;
         }
 
+        private (int steering, int throttle) ComputeOutputs(bool applyDeltaLimit, bool updateDeltaState)
+        {
+            var steeringInput = Math.Clamp(ApplySteeringDirection(steeringValue), 0, 180);
+            var throttleInput = Math.Clamp(ApplyThrottleDirection(throttleValue), 0, 180);
+
+            var steeringMapped = ApplyPiecewiseMapping(steeringMappings, steeringInput);
+            var throttleMapped = ApplyPiecewiseMapping(throttleMappings, throttleInput);
+
+            int steering = Math.Clamp(steeringMapped + steeringOffset, 0, 180);
+            int throttle = Math.Clamp(throttleMapped, 0, 180);
+
+            if (applyDeltaLimit)
+            {
+                (steering, throttle) = ApplyDeltaLimits(steering, throttle, updateDeltaState);
+            }
+            else if (updateDeltaState)
+            {
+                lastSentSteering = steering;
+                lastSentThrottle = throttle;
+                hasLastSentOutputs = true;
+            }
+
+            return (steering, throttle);
+        }
+
+        private int ApplyPiecewiseMapping(List<ControlMappingRange> mappings, int input)
+        {
+            if (mappings == null || mappings.Count == 0)
+            {
+                return input;
+            }
+
+            foreach (var mapping in mappings)
+            {
+                if (input >= mapping.InputMin && input <= mapping.InputMax)
+                {
+                    var inputRange = mapping.InputMax - mapping.InputMin;
+                    var outputRange = mapping.OutputMax - mapping.OutputMin;
+
+                    if (inputRange == 0)
+                    {
+                        return Math.Clamp(mapping.OutputMin, 0, 180);
+                    }
+
+                    var normalized = (double)(input - mapping.InputMin) / inputRange;
+                    var output = mapping.OutputMin + (int)Math.Round(normalized * outputRange);
+                    return Math.Clamp(output, 0, 180);
+                }
+            }
+
+            return input;
+        }
+
+        private (int steering, int throttle) ApplyDeltaLimits(int steeringTarget, int throttleTarget, bool updateDeltaState)
+        {
+            if (!hasLastSentOutputs)
+            {
+                if (updateDeltaState)
+                {
+                    lastSentSteering = steeringTarget;
+                    lastSentThrottle = throttleTarget;
+                    hasLastSentOutputs = true;
+                }
+                return (steeringTarget, throttleTarget);
+            }
+
+            var limitedSteering = ApplyDeltaLimit(lastSentSteering, steeringTarget, steeringStepLimit);
+            var limitedThrottle = ApplyDeltaLimit(lastSentThrottle, throttleTarget, throttleStepLimit);
+
+            if (updateDeltaState)
+            {
+                lastSentSteering = limitedSteering;
+                lastSentThrottle = limitedThrottle;
+            }
+
+            return (limitedSteering, limitedThrottle);
+        }
+
+        private int ApplyDeltaLimit(int previous, int target, int maxStep)
+        {
+            if (maxStep <= 0)
+            {
+                return target;
+            }
+
+            int delta = target - previous;
+            if (Math.Abs(delta) <= maxStep)
+            {
+                return target;
+            }
+
+            return previous + Math.Sign(delta) * maxStep;
+        }
+
+        private void BroadcastCurrentOutputsPreview()
+        {
+            var outputs = ComputeOutputs(applyDeltaLimit: true, updateDeltaState: false);
+            TryBroadcastControlEvent(outputs.steering, outputs.throttle);
+        }
+
         protected override void OnClosing(WindowClosingEventArgs e)
         {
             Disconnect();
@@ -1287,10 +1592,17 @@ namespace RCCarController
         private void TryBroadcastControlEvent(int steering180, int throttle180)
         {
             var rawSteeringValue = webSocketInputManager.LastRawSteering ?? MapToRange(steering180, 0, 180, 0, 65535);
+            
+            var neutralOutput = ApplyPiecewiseMapping(throttleMappings, 90);
+            var minOutput = ApplyPiecewiseMapping(throttleMappings, 0);
+            var maxOutput = ApplyPiecewiseMapping(throttleMappings, 180);
+            var forwardSpan = Math.Max(1, Math.Abs(neutralOutput - minOutput));
+            var brakeSpan = Math.Max(1, Math.Abs(maxOutput - neutralOutput));
+            
             var rawThrottleValue = webSocketInputManager.LastRawThrottle
-                ?? MapToRange(Math.Max(0, 90 - throttle180), 0, 90, 0, 65535); // neutral=0, forward increases
+                ?? MapToRange(Math.Max(0, neutralOutput - throttle180), 0, forwardSpan, 0, 65535); // neutral=0, forward increases
             var rawBrakeValue = webSocketInputManager.LastRawBrake
-                ?? MapToRange(Math.Max(0, throttle180 - 90), 0, 90, 0, 65535); // neutral=0, brake increases
+                ?? MapToRange(Math.Max(0, throttle180 - neutralOutput), 0, brakeSpan, 0, 65535); // neutral=0, brake increases
             var brake180 = MapToRange(rawBrakeValue, 0, 65535, 0, 180);
 
             if (lastBroadcastSteering == steering180 &&
