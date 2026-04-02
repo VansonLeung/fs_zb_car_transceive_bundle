@@ -29,6 +29,10 @@ namespace RCCarController
         private int throttleValue = 90;  // 0-180 (neutral)
         private bool isDrivingMode = false;
         private int steeringOffset = 0;
+        private int steeringStepLimit = 180;
+        private int throttleStepLimit = 180;
+        private List<ControlMappingRange> throttleMappings = new List<ControlMappingRange> { new ControlMappingRange(0, 180, 0, 180) };
+        private List<ControlMappingRange> steeringMappings = new List<ControlMappingRange> { new ControlMappingRange(0, 180, 0, 180) };
         private bool webSocketClientEnabled = true;
         private bool reverseSteeringInput = false;
         private bool reverseThrottleInput = false;
@@ -38,10 +42,31 @@ namespace RCCarController
         private NumericUpDown? startIndexNumeric;
         private NumericUpDown? endIndexNumeric;
         private NumericUpDown? activeIndexNumeric;
+        private NumericUpDown? steeringStepLimitNumeric;
+        private NumericUpDown? throttleStepLimitNumeric;
+        private ListBox? throttleMappingListBox;
+        private ListBox? steeringMappingListBox;
+        private TextBox? newInputMinTextBox;
+        private TextBox? newInputMaxTextBox;
+        private TextBox? newOutputMinTextBox;
+        private TextBox? newOutputMaxTextBox;
+        private TextBox? newSteeringInputMinTextBox;
+        private TextBox? newSteeringInputMaxTextBox;
+        private TextBox? newSteeringOutputMinTextBox;
+        private TextBox? newSteeringOutputMaxTextBox;
+        private Button? addMappingButton;
+        private Button? removeMappingButton;
+        private Button? clearMappingsButton;
+        private Button? resetDefaultMappingButton;
+        private Button? addSteeringMappingButton;
+        private Button? removeSteeringMappingButton;
+        private Button? clearSteeringMappingsButton;
+        private Button? resetDefaultSteeringMappingButton;
         private TextBlock? activeMacDisplayLabel;
         private Button? applyRangeButton;
         private Button? setActiveButton;
         private Button? requestActiveMacButton;
+
         private EventWebSocketServer eventServer = new EventWebSocketServer();
 
         // Transmit Timer
@@ -53,6 +78,9 @@ namespace RCCarController
         private int? lastBroadcastSteeringRaw;
         private int? lastBroadcastThrottleRaw;
         private int? lastBroadcastBrakeRaw;
+        private bool hasLastSentOutputs = false;
+        private int lastSentSteering = 90;
+        private int lastSentThrottle = 90;
 
         public MainWindow()
         {
@@ -92,6 +120,26 @@ namespace RCCarController
             var baudComboBox = this.FindControl<ComboBox>("BaudComboBox");
             var drivingModeToggle = this.FindControl<CheckBox>("DrivingModeToggle");
             var steeringOffsetNumeric = this.FindControl<NumericUpDown>("SteeringOffsetNumeric");
+            steeringStepLimitNumeric = this.FindControl<NumericUpDown>("SteeringStepLimitNumeric");
+            throttleStepLimitNumeric = this.FindControl<NumericUpDown>("ThrottleStepLimitNumeric");
+            throttleMappingListBox = this.FindControl<ListBox>("ThrottleMappingListBox");
+            steeringMappingListBox = this.FindControl<ListBox>("SteeringMappingListBox");
+            newInputMinTextBox = this.FindControl<TextBox>("NewInputMinTextBox");
+            newInputMaxTextBox = this.FindControl<TextBox>("NewInputMaxTextBox");
+            newOutputMinTextBox = this.FindControl<TextBox>("NewOutputMinTextBox");
+            newOutputMaxTextBox = this.FindControl<TextBox>("NewOutputMaxTextBox");
+            newSteeringInputMinTextBox = this.FindControl<TextBox>("NewSteeringInputMinTextBox");
+            newSteeringInputMaxTextBox = this.FindControl<TextBox>("NewSteeringInputMaxTextBox");
+            newSteeringOutputMinTextBox = this.FindControl<TextBox>("NewSteeringOutputMinTextBox");
+            newSteeringOutputMaxTextBox = this.FindControl<TextBox>("NewSteeringOutputMaxTextBox");
+            addMappingButton = this.FindControl<Button>("AddMappingButton");
+            removeMappingButton = this.FindControl<Button>("RemoveMappingButton");
+            clearMappingsButton = this.FindControl<Button>("ClearMappingsButton");
+            resetDefaultMappingButton = this.FindControl<Button>("ResetDefaultMappingButton");
+            addSteeringMappingButton = this.FindControl<Button>("AddSteeringMappingButton");
+            removeSteeringMappingButton = this.FindControl<Button>("RemoveSteeringMappingButton");
+            clearSteeringMappingsButton = this.FindControl<Button>("ClearSteeringMappingsButton");
+            resetDefaultSteeringMappingButton = this.FindControl<Button>("ResetDefaultSteeringMappingButton");
             var webSocketToggle = this.FindControl<CheckBox>("WebSocketToggle");
             var reverseSteeringToggle = this.FindControl<CheckBox>("ReverseSteeringToggle");
             var reverseThrottleToggle = this.FindControl<CheckBox>("ReverseThrottleToggle");
@@ -113,6 +161,16 @@ namespace RCCarController
             if (connectButton != null) connectButton.Click += ConnectButton_Click;
             if (drivingModeToggle != null) drivingModeToggle.IsCheckedChanged += DrivingModeToggle_IsCheckedChanged;
             if (steeringOffsetNumeric != null) steeringOffsetNumeric.ValueChanged += SteeringOffsetNumeric_ValueChanged;
+            if (steeringStepLimitNumeric != null) steeringStepLimitNumeric.ValueChanged += SteeringStepLimitNumeric_ValueChanged;
+            if (throttleStepLimitNumeric != null) throttleStepLimitNumeric.ValueChanged += ThrottleStepLimitNumeric_ValueChanged;
+            if (addMappingButton != null) addMappingButton.Click += AddMappingButton_Click;
+            if (removeMappingButton != null) removeMappingButton.Click += RemoveMappingButton_Click;
+            if (clearMappingsButton != null) clearMappingsButton.Click += ClearMappingsButton_Click;
+            if (resetDefaultMappingButton != null) resetDefaultMappingButton.Click += ResetDefaultMappingButton_Click;
+            if (addSteeringMappingButton != null) addSteeringMappingButton.Click += AddSteeringMappingButton_Click;
+            if (removeSteeringMappingButton != null) removeSteeringMappingButton.Click += RemoveSteeringMappingButton_Click;
+            if (clearSteeringMappingsButton != null) clearSteeringMappingsButton.Click += ClearSteeringMappingsButton_Click;
+            if (resetDefaultSteeringMappingButton != null) resetDefaultSteeringMappingButton.Click += ResetDefaultSteeringMappingButton_Click;
             if (webSocketToggle != null) webSocketToggle.IsCheckedChanged += WebSocketToggle_IsCheckedChanged;
             if (reverseSteeringToggle != null) reverseSteeringToggle.IsCheckedChanged += ReverseSteeringToggle_IsCheckedChanged;
             if (reverseThrottleToggle != null) reverseThrottleToggle.IsCheckedChanged += ReverseThrottleToggle_IsCheckedChanged;
@@ -137,6 +195,10 @@ namespace RCCarController
             reverseThrottleInput = settingsManager.ReverseThrottleInput;
             autoConnectSerial = settingsManager.AutoConnectSerial;
             steeringOffset = settingsManager.SteeringOffset;
+            steeringStepLimit = Math.Clamp(settingsManager.SteeringStepLimit, 1, 180);
+            throttleStepLimit = Math.Clamp(settingsManager.ThrottleStepLimit, 1, 180);
+            throttleMappings = settingsManager.ThrottleMappings;
+            steeringMappings = settingsManager.SteeringMappings;
             if (startIndexNumeric != null) startIndexNumeric.Value = settingsManager.StartIndex;
             if (endIndexNumeric != null) endIndexNumeric.Value = settingsManager.EndIndex;
             if (activeIndexNumeric != null)
@@ -150,6 +212,10 @@ namespace RCCarController
             if (reverseThrottleToggle != null) reverseThrottleToggle.IsChecked = reverseThrottleInput;
             if (autoConnectToggle != null) autoConnectToggle.IsChecked = autoConnectSerial;
             if (steeringOffsetNumeric != null) steeringOffsetNumeric.Value = steeringOffset;
+            if (steeringStepLimitNumeric != null) steeringStepLimitNumeric.Value = steeringStepLimit;
+            if (throttleStepLimitNumeric != null) throttleStepLimitNumeric.Value = throttleStepLimit;
+            RefreshMappingListBox(throttleMappingListBox, throttleMappings);
+            RefreshMappingListBox(steeringMappingListBox, steeringMappings);
 
             StartEventServer();
             // Now safe to refresh ports
@@ -295,13 +361,12 @@ namespace RCCarController
                     gameControllerManager.Poll();
                 }
 
-                // Send command
-                int effectiveSteering = Math.Clamp(ApplySteeringDirection(steeringValue) + steeringOffset, 0, 180);
-                int effectiveThrottle = Math.Clamp(ApplyThrottleDirection(throttleValue), 0, 180);
+                // Prepare outputs (mapping + delta limiting)
+                var outputs = ComputeOutputs(applyDeltaLimit: true, updateDeltaState: true);
 
-                serialManager.SendCommand(effectiveSteering, effectiveThrottle);
+                serialManager.SendCommand(outputs.steering, outputs.throttle);
                 UpdateLatestMessageLabel(serialManager.LatestMessage);
-                TryBroadcastControlEvent(effectiveSteering, effectiveThrottle);
+                TryBroadcastControlEvent(outputs.steering, outputs.throttle);
             }
         }
 
@@ -420,6 +485,146 @@ namespace RCCarController
             UpdateSteeringOffsetLabel();
             settingsManager.SaveSettings(steeringOffset: steeringOffset);
             UpdateSteeringUI();
+        }
+
+        private void SteeringStepLimitNumeric_ValueChanged(object? sender, Avalonia.Controls.NumericUpDownValueChangedEventArgs e)
+        {
+            steeringStepLimit = (int)Math.Clamp(e.NewValue ?? steeringStepLimit, 1, 180);
+            settingsManager.SaveSettings(steeringStepLimit: steeringStepLimit);
+        }
+
+        private void ThrottleStepLimitNumeric_ValueChanged(object? sender, Avalonia.Controls.NumericUpDownValueChangedEventArgs e)
+        {
+            throttleStepLimit = (int)Math.Clamp(e.NewValue ?? throttleStepLimit, 1, 180);
+            settingsManager.SaveSettings(throttleStepLimit: throttleStepLimit);
+        }
+
+        private void AddMappingButton_Click(object? sender, RoutedEventArgs e)
+        {
+            var inputMin = ParseInput(newInputMinTextBox, 0);
+            var inputMax = ParseInput(newInputMaxTextBox, 180);
+            var outputMin = ParseInput(newOutputMinTextBox, 0);
+            var outputMax = ParseInput(newOutputMaxTextBox, 180);
+
+            if (inputMin > inputMax)
+            {
+                LogMessage($"Invalid input range: {inputMin} > {inputMax}");
+                return;
+            }
+
+            var newMapping = new ControlMappingRange(inputMin, inputMax, outputMin, outputMax);
+            throttleMappings.Add(newMapping);
+            settingsManager.SaveSettings(throttleMappings: throttleMappings);
+            RefreshMappingListBox(throttleMappingListBox, throttleMappings);
+            LogMessage($"Added mapping: {newMapping}");
+        }
+
+        private void RemoveMappingButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (throttleMappingListBox?.SelectedItem is ControlMappingRange selected)
+            {
+                throttleMappings.Remove(selected);
+                settingsManager.SaveSettings(throttleMappings: throttleMappings);
+                RefreshMappingListBox(throttleMappingListBox, throttleMappings);
+                LogMessage($"Removed mapping: {selected}");
+            }
+        }
+
+        private void ClearMappingsButton_Click(object? sender, RoutedEventArgs e)
+        {
+            throttleMappings.Clear();
+            settingsManager.SaveSettings(throttleMappings: throttleMappings);
+            RefreshMappingListBox(throttleMappingListBox, throttleMappings);
+            LogMessage("Cleared all throttle mappings");
+        }
+
+        private void ResetDefaultMappingButton_Click(object? sender, RoutedEventArgs e)
+        {
+            throttleMappings = new List<ControlMappingRange> { new ControlMappingRange(0, 180, 0, 180) };
+            settingsManager.SaveSettings(throttleMappings: throttleMappings);
+            RefreshMappingListBox(throttleMappingListBox, throttleMappings);
+            LogMessage("Reset to default mapping [0-180] → [0-180]");
+        }
+
+        private void AddSteeringMappingButton_Click(object? sender, RoutedEventArgs e)
+        {
+            var inputMin = ParseInput(newSteeringInputMinTextBox, 0);
+            var inputMax = ParseInput(newSteeringInputMaxTextBox, 180);
+            var outputMin = ParseInput(newSteeringOutputMinTextBox, 0);
+            var outputMax = ParseInput(newSteeringOutputMaxTextBox, 180);
+
+            if (inputMin > inputMax)
+            {
+                LogMessage($"Invalid steering input range: {inputMin} > {inputMax}");
+                return;
+            }
+
+            var newMapping = new ControlMappingRange(inputMin, inputMax, outputMin, outputMax);
+            steeringMappings.Add(newMapping);
+            settingsManager.SaveSettings(steeringMappings: steeringMappings);
+            RefreshMappingListBox(steeringMappingListBox, steeringMappings);
+            LogMessage($"Added steering mapping: {newMapping}");
+        }
+
+        private void RemoveSteeringMappingButton_Click(object? sender, RoutedEventArgs e)
+        {
+            if (steeringMappingListBox?.SelectedItem is ControlMappingRange selected)
+            {
+                steeringMappings.Remove(selected);
+                settingsManager.SaveSettings(steeringMappings: steeringMappings);
+                RefreshMappingListBox(steeringMappingListBox, steeringMappings);
+                LogMessage($"Removed steering mapping: {selected}");
+            }
+        }
+
+        private void ClearSteeringMappingsButton_Click(object? sender, RoutedEventArgs e)
+        {
+            steeringMappings.Clear();
+            settingsManager.SaveSettings(steeringMappings: steeringMappings);
+            RefreshMappingListBox(steeringMappingListBox, steeringMappings);
+            LogMessage("Cleared all steering mappings");
+        }
+
+        private void ResetDefaultSteeringMappingButton_Click(object? sender, RoutedEventArgs e)
+        {
+            steeringMappings = new List<ControlMappingRange> { new ControlMappingRange(0, 180, 0, 180) };
+            settingsManager.SaveSettings(steeringMappings: steeringMappings);
+            RefreshMappingListBox(steeringMappingListBox, steeringMappings);
+            LogMessage("Reset steering mapping to [0-180] → [0-180]");
+        }
+
+        private int ParseInput(TextBox? textBox, int defaultValue)
+        {
+            if (textBox == null)
+            {
+                return defaultValue;
+            }
+
+            var text = textBox.Text?.Trim();
+            if (int.TryParse(text, out var parsed))
+            {
+                parsed = Math.Clamp(parsed, 0, 180);
+                textBox.Text = parsed.ToString();
+                return parsed;
+            }
+
+            textBox.Text = defaultValue.ToString();
+            return defaultValue;
+        }
+
+        private void RefreshMappingListBox(ListBox? listBox, List<ControlMappingRange> mappings)
+        {
+            if (listBox == null)
+                return;
+
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                listBox.Items.Clear();
+                foreach (var mapping in mappings)
+                {
+                    listBox.Items.Add(mapping);
+                }
+            });
         }
 
         private void UpdateSteeringUI()
@@ -645,10 +850,6 @@ namespace RCCarController
             UpdateSteeringUI();
             UpdateThrottleUI();
             isUpdatingFromWebSocket = false;
-
-            var effectiveSteering = Math.Clamp(ApplySteeringDirection(steeringValue) + steeringOffset, 0, 180);
-            var effectiveThrottle = Math.Clamp(ApplyThrottleDirection(throttleValue), 0, 180);
-            TryBroadcastControlEvent(effectiveSteering, effectiveThrottle);
         }
 
         private void UpdateLatestMessageLabel(string message)
@@ -711,10 +912,6 @@ namespace RCCarController
             throttleValue = Math.Clamp(throttle, 0, 180);
             UpdateSteeringUI();
             UpdateThrottleUI();
-
-            var effectiveSteering = Math.Clamp(ApplySteeringDirection(steeringValue) + steeringOffset, 0, 180);
-            var effectiveThrottle = Math.Clamp(ApplyThrottleDirection(throttleValue), 0, 180);
-            TryBroadcastControlEvent(effectiveSteering, effectiveThrottle);
         }
 
         private void RefreshButton_Click(object? sender, RoutedEventArgs e)
@@ -728,178 +925,275 @@ namespace RCCarController
             if (portComboBox != null)
             {
                 portComboBox.Items.Clear();
-                string[] ports = serialManager.GetAvailablePorts();
-                foreach (var port in ports)
-                {
-                    portComboBox.Items.Add(port);
+                    string[] ports = serialManager.GetAvailablePorts();
+                    foreach (var port in ports)
+                    {
+                        portComboBox.Items.Add(port);
+                    }
+
+                    if (ports.Length > 0)
+                    {
+                        if (!string.IsNullOrEmpty(settingsManager.SavedPort) && ports.Contains(settingsManager.SavedPort))
+                        {
+                            portComboBox.SelectedItem = settingsManager.SavedPort;
+                        }
+                        else
+                        {
+                            portComboBox.SelectedIndex = 0;
+                        }
+                    }
+
+                    LogMessage($"Found {ports.Length} serial ports");
                 }
+            }
 
-                if (ports.Length > 0)
+            private async void ConnectButton_Click(object? sender, RoutedEventArgs e)
+            {
+                if (!serialManager.IsConnected)
                 {
-                    if (!string.IsNullOrEmpty(settingsManager.SavedPort) && ports.Contains(settingsManager.SavedPort))
-                    {
-                        portComboBox.SelectedItem = settingsManager.SavedPort;
-                    }
-                    else
-                    {
-                        portComboBox.SelectedIndex = 0;
-                    }
-                }
-
-                LogMessage($"Found {ports.Length} serial ports");
-            }
-        }
-
-        private async void ConnectButton_Click(object? sender, RoutedEventArgs e)
-        {
-            if (!serialManager.IsConnected)
-            {
-                await Connect();
-            }
-            else
-            {
-                Disconnect();
-            }
-        }
-
-        private async Task Connect(bool showErrors = true)
-        {
-            var portComboBox = this.FindControl<ComboBox>("PortComboBox");
-            var baudComboBox = this.FindControl<ComboBox>("BaudComboBox");
-            var connectButton = this.FindControl<Button>("ConnectButton");
-            var statusLabel = this.FindControl<TextBlock>("StatusLabel");
-
-            if (connectInProgress || portComboBox == null || baudComboBox == null || connectButton == null || statusLabel == null)
-            {
-                return;
-            }
-
-            connectInProgress = true;
-            try
-            {
-                if (portComboBox.SelectedItem == null)
-                {
-                    if (showErrors)
-                    {
-                        await ShowMessage("Please select a serial port", "Error");
-                    }
-                    else
-                    {
-                        LogMessage("Auto-connect skipped: no serial port selected.");
-                    }
-                    return;
-                }
-
-                string portName = portComboBox.SelectedItem.ToString();
-                string baudRateStr = (baudComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? baudComboBox.SelectedItem?.ToString() ?? "115200";
-
-                bool success = await serialManager.Connect(portName, int.Parse(baudRateStr));
-                if (success)
-                {
-                    connectButton.Content = "Disconnect";
-                    statusLabel.Text = "ENGINE: ON";
-                    statusLabel.Classes.Clear();
-                    statusLabel.Classes.Add("green");
-                    transmitTimer?.Start();
-
-                    LogMessage($"Connected to {portName} at {baudRateStr} baud");
-                    settingsManager.SaveSettings(portName, baudComboBox.SelectedItem);
-                    ApplyRangeToGround();
-                    SetActiveIndexOnGround();
-                    RequestActiveMacFromGround();
+                    await Connect();
                 }
                 else
                 {
-                    if (showErrors)
+                    Disconnect();
+                }
+            }
+
+            private async Task Connect(bool showErrors = true)
+            {
+                var portComboBox = this.FindControl<ComboBox>("PortComboBox");
+                var baudComboBox = this.FindControl<ComboBox>("BaudComboBox");
+                var connectButton = this.FindControl<Button>("ConnectButton");
+                var statusLabel = this.FindControl<TextBlock>("StatusLabel");
+
+                if (connectInProgress || portComboBox == null || baudComboBox == null || connectButton == null || statusLabel == null)
+                {
+                    return;
+                }
+
+                connectInProgress = true;
+                try
+                {
+                    if (portComboBox.SelectedItem == null)
                     {
-                        await ShowMessage("Failed to connect", "Error");
+                        if (showErrors)
+                        {
+                            await ShowMessage("Please select a serial port", "Error");
+                        }
+                        else
+                        {
+                            LogMessage("Auto-connect skipped: no serial port selected.");
+                        }
+                        return;
+                    }
+
+                    string portName = portComboBox.SelectedItem.ToString();
+                    string baudRateStr = (baudComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? baudComboBox.SelectedItem?.ToString() ?? "115200";
+
+                    bool success = await serialManager.Connect(portName, int.Parse(baudRateStr));
+                    if (success)
+                    {
+                        connectButton.Content = "Disconnect";
+                        statusLabel.Text = "ENGINE: ON";
+                        statusLabel.Classes.Clear();
+                        statusLabel.Classes.Add("green");
+                        transmitTimer?.Start();
+
+                        LogMessage($"Connected to {portName} at {baudRateStr} baud");
+                        settingsManager.SaveSettings(portName, baudComboBox.SelectedItem);
+                        ApplyRangeToGround();
+                        SetActiveIndexOnGround();
+                        RequestActiveMacFromGround();
                     }
                     else
                     {
-                        LogMessage($"Auto-connect failed for {portName} at {baudRateStr} baud.");
+                        if (showErrors)
+                        {
+                            await ShowMessage("Failed to connect", "Error");
+                        }
+                        else
+                        {
+                            LogMessage($"Auto-connect failed for {portName} at {baudRateStr} baud.");
+                        }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                LogMessage("Connection error: " + ex.Message);
-                if (showErrors)
+                catch (Exception ex)
                 {
-                    await ShowMessage("Failed to connect: " + ex.Message, "Error");
+                    LogMessage("Connection error: " + ex.Message);
+                    if (showErrors)
+                    {
+                        await ShowMessage("Failed to connect: " + ex.Message, "Error");
+                    }
+                }
+                finally
+                {
+                    connectInProgress = false;
                 }
             }
-            finally
+
+            private void Disconnect()
             {
-                connectInProgress = false;
+                var connectButton = this.FindControl<Button>("ConnectButton");
+                var statusLabel = this.FindControl<TextBlock>("StatusLabel");
+
+                serialManager.Disconnect();
+                transmitTimer?.Stop();
+                hasLastSentOutputs = false;
+                lastSentSteering = 90;
+                lastSentThrottle = 90;
+                if (connectButton != null) connectButton.Content = "Connect";
+                if (statusLabel != null)
+                {
+                    statusLabel.Text = "ENGINE: OFF";
+                    statusLabel.Classes.Clear();
+                    statusLabel.Classes.Add("red");
+                }
+
+                UpdateLatestMessageLabel(serialManager.LatestMessage);
+                UpdateLatestAckLabel("(waiting)");
+                UpdateActiveMacLabel(-1, "(none)", 0);
+
+                LogMessage("Disconnected");
             }
-        }
 
-        private void Disconnect()
-        {
-            var connectButton = this.FindControl<Button>("ConnectButton");
-            var statusLabel = this.FindControl<TextBlock>("StatusLabel");
-
-            serialManager.Disconnect();
-            transmitTimer?.Stop();
-            if (connectButton != null) connectButton.Content = "Connect";
-            if (statusLabel != null)
+            private async Task ShowMessage(string message, string title)
             {
-                statusLabel.Text = "ENGINE: OFF";
-                statusLabel.Classes.Clear();
-                statusLabel.Classes.Add("red");
+                var dialog = new Window
+                {
+                    Title = title,
+                    Content = new TextBlock { Text = message, Margin = new Avalonia.Thickness(20) },
+                    Width = 300,
+                    Height = 200,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner
+                };
+                await dialog.ShowDialog(this);
             }
 
-            UpdateLatestMessageLabel(serialManager.LatestMessage);
-            UpdateLatestAckLabel("(waiting)");
-            UpdateActiveMacLabel(-1, "(none)", 0);
-
-            LogMessage("Disconnected");
-        }
-
-        private async Task ShowMessage(string message, string title)
-        {
-            var dialog = new Window
+            private void LogMessage(string message)
             {
-                Title = title,
-                Content = new TextBlock { Text = message, Margin = new Avalonia.Thickness(20) },
-                Width = 300,
-                Height = 200,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner
-            };
-            await dialog.ShowDialog(this);
+                // Dispatcher.UIThread.InvokeAsync(() =>
+                // {
+                //     var logTextBox = this.FindControl<TextBox>("LogTextBox");
+                //     if (logTextBox != null)
+                //     {
+                //         string timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
+                //         logTextBox.Text += $"[{timestamp}] {message}\n";
+                //
+                //         // Auto scroll to bottom
+                //         logTextBox.CaretIndex = logTextBox.Text.Length;
+                //
+                //         // Limit log size
+                //         var lines = logTextBox.Text.Split('\n');
+                //         if (lines.Length > 1000)
+                //         {
+                //             logTextBox.Text = string.Join('\n', lines.Skip(500));
+                //         }
+                //     }
+                // });
+            }
+
+            private int ApplySteeringDirection(int value)
+            {
+                return reverseSteeringInput ? 180 - value : value;
+            }
+
+            private int ApplyThrottleDirection(int value)
+            {
+                return reverseThrottleInput ? 180 - value : value;
+            }
+
+            private (int steering, int throttle) ComputeOutputs(bool applyDeltaLimit, bool updateDeltaState)
+            {
+                var steeringInput = Math.Clamp(ApplySteeringDirection(steeringValue), 0, 180);
+                var throttleInput = Math.Clamp(ApplyThrottleDirection(throttleValue), 0, 180);
+
+                var steeringMapped = ApplyPiecewiseMapping(steeringMappings, steeringInput);
+                var throttleMapped = ApplyPiecewiseMapping(throttleMappings, throttleInput);
+
+                int steering = Math.Clamp(steeringMapped + steeringOffset, 0, 180);
+                int throttle = Math.Clamp(throttleMapped, 0, 180);
+
+                if (applyDeltaLimit)
+                {
+                    (steering, throttle) = ApplyDeltaLimits(steering, throttle, updateDeltaState);
+                }
+                else if (updateDeltaState)
+                {
+                    lastSentSteering = steering;
+                    lastSentThrottle = throttle;
+                    hasLastSentOutputs = true;
+                }
+
+                return (steering, throttle);
+            }
+
+            private int ApplyPiecewiseMapping(List<ControlMappingRange> mappings, int input)
+            {
+                if (mappings == null || mappings.Count == 0)
+                {
+                    return input;
+                }
+
+                foreach (var mapping in mappings)
+                {
+                    if (input >= mapping.InputMin && input <= mapping.InputMax)
+                    {
+                        var inputRange = mapping.InputMax - mapping.InputMin;
+                        var outputRange = mapping.OutputMax - mapping.OutputMin;
+
+                        if (inputRange == 0)
+                        {
+                            return Math.Clamp(mapping.OutputMin, 0, 180);
+                        }
+
+                        var normalized = (double)(input - mapping.InputMin) / inputRange;
+                        var output = mapping.OutputMin + (int)Math.Round(normalized * outputRange);
+                        return Math.Clamp(output, 0, 180);
+                    }
+                }
+
+                return input;
+            }
+
+        private (int steering, int throttle) ApplyDeltaLimits(int steeringTarget, int throttleTarget, bool updateDeltaState)
+        {
+            if (!hasLastSentOutputs)
+            {
+                if (updateDeltaState)
+                {
+                    lastSentSteering = steeringTarget;
+                    lastSentThrottle = throttleTarget;
+                    hasLastSentOutputs = true;
+                }
+                return (steeringTarget, throttleTarget);
+            }
+
+            var limitedSteering = ApplyDeltaLimit(lastSentSteering, steeringTarget, steeringStepLimit);
+            var limitedThrottle = ApplyDeltaLimit(lastSentThrottle, throttleTarget, throttleStepLimit);
+
+            if (updateDeltaState)
+            {
+                lastSentSteering = limitedSteering;
+                lastSentThrottle = limitedThrottle;
+            }
+
+            return (limitedSteering, limitedThrottle);
         }
 
-        private void LogMessage(string message)
+        private int ApplyDeltaLimit(int previous, int target, int maxStep)
         {
-            // Dispatcher.UIThread.InvokeAsync(() =>
-            // {
-            //     var logTextBox = this.FindControl<TextBox>("LogTextBox");
-            //     if (logTextBox != null)
-            //     {
-            //         string timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
-            //         logTextBox.Text += $"[{timestamp}] {message}\n";
+            if (maxStep <= 0)
+            {
+                return target;
+            }
 
-            //         // Auto scroll to bottom
-            //         logTextBox.CaretIndex = logTextBox.Text.Length;
+            int delta = target - previous;
+            if (Math.Abs(delta) <= maxStep)
+            {
+                return target;
+            }
 
-            //         // Limit log size
-            //         var lines = logTextBox.Text.Split('\n');
-            //         if (lines.Length > 1000)
-            //         {
-            //             logTextBox.Text = string.Join('\n', lines.Skip(500));
-            //         }
-            //     }
-            // });
-        }
-
-        private int ApplySteeringDirection(int value)
-        {
-            return reverseSteeringInput ? 180 - value : value;
-        }
-
-        private int ApplyThrottleDirection(int value)
-        {
-            return reverseThrottleInput ? 180 - value : value;
+            return previous + Math.Sign(delta) * maxStep;
         }
 
         protected override void OnClosing(WindowClosingEventArgs e)
@@ -918,12 +1212,9 @@ namespace RCCarController
 
         private void TryBroadcastControlEvent(int steering180, int throttle180)
         {
-            var rawSteeringValue = webSocketInputManager.LastRawSteering
-                ?? MapToRange(steering180, 0, 180, 0, 65535);
-            var rawThrottleValue = webSocketInputManager.LastRawThrottle
-                ?? MapToRange(throttle180, 0, 180, 0, 65535);
-            var rawBrakeValue = webSocketInputManager.LastRawBrake
-                ?? 0;
+            var rawSteeringValue = webSocketInputManager.LastRawSteering ?? MapToRange(steering180, 0, 180, 0, 65535);
+            var rawThrottleValue = webSocketInputManager.LastRawThrottle ?? MapToRange(throttle180, 0, 180, 0, 65535);
+            var rawBrakeValue = webSocketInputManager.LastRawBrake ?? 0;
             var brake180 = MapToRange(rawBrakeValue, 0, 65535, 0, 180);
 
             if (lastBroadcastSteering == steering180 &&
