@@ -33,7 +33,9 @@ cd /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_zb_serial_gnd
 
 cd /Users/van/Documents/projects/fs/VanHIDDevices/HIDDeviceMonitor && dotnet publish HIDDeviceMonitor.csproj -c Release -r win-x64 --self-contained true /p:GenerateFullPaths=true /p:PublishSingleFile=true -o /Users/van/Documents/projects/fs/fs_zb_car_transceive_bundle/fs_output/win-x64/rc_hid_monitor
 
-After publishing, you can start all Windows apps with: `fs_output/run-win-x64.cmd` (launches HID Monitor, Ground app, Web GUI, then GUI Launcher with 5s gaps).
+After publishing, you can start the current main-ready Windows bundle with: `fs_output/run-win-x64.cmd` (launches HID Monitor and the Ground app; the Web GUI and GUI Launcher remain disabled in the script until they are production-ready).
+
+The desktop controller writes runtime settings to `fs_zb_serial_gnd_app_win10_net_directx/settings.ini` locally. The repository keeps a sanitized example in `fs_zb_serial_gnd_app_win10_net_directx/settings.example.ini` instead of tracking machine-specific state.
 
 ```
 
