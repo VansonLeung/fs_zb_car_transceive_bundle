@@ -173,13 +173,16 @@ function normalizeTelemetryPayload(payload) {
   if (!payload || typeof payload !== "object") return null;
 
   if (payload.type === "control" && payload.version) {
+    const steerDeg = toNumber(payload.steering, 90);
+    const throttleDeg = toNumber(payload.throttle, 90);
+    const brakeDeg = toNumber(payload.brake, 0);
     return {
-      steering180: toNumber(payload.steering),
-      throttle180: toNumber(payload.throttle),
-      brake180: toNumber(payload.brake),
-      steeringRaw: toNumber(payload.steeringRaw),
-      throttleRaw: toNumber(payload.throttleRaw),
-      brakeRaw: toNumber(payload.brakeRaw),
+      steering180: steerDeg,
+      throttle180: throttleDeg,
+      brake180: brakeDeg,
+      steeringRaw: toNumber(payload.steeringRaw, Math.round(mapRange(clamp(steerDeg ?? 90, 0, 180), 0, 180, 0, 65535))),
+      throttleRaw: toNumber(payload.throttleRaw, Math.round(mapRange(clamp(throttleDeg ?? 90, 0, 180), 0, 180, 0, 65535))),
+      brakeRaw: toNumber(payload.brakeRaw, Math.round(mapRange(clamp(brakeDeg ?? 0, 0, 180), 0, 180, 0, 65535))),
     };
   }
 
@@ -215,17 +218,12 @@ function updateTelemetry(data) {
 
   const netInput = clamp(throttleRawResolved - brakeRawResolved, -65535, 65535);
   const normalized = netInput / 65535;
-  const throttleValueFromRaw = Math.round(clamp(90 - normalized * 90, 0, 180));
-
-  const throttleValue = Number.isFinite(data.throttle180)
-    ? Math.round(clamp(data.throttle180, 0, 180))
-    : throttleValueFromRaw;
 
   const steeringValue = Number.isFinite(data.steering180)
     ? Math.round(clamp(data.steering180, 0, 180))
     : Math.round(mapRange(steeringRawResolved, 0, 65535, 0, 180));
 
-  const forwardPercent = clamp((90 - throttleValue) / 90, 0, 1);
+  const forwardPercent = clamp(normalized, 0, 1);
   const speedKph = Math.round(forwardPercent * 150);
 
   // Update Speed Gauge

@@ -850,6 +850,8 @@ namespace RCCarController
             UpdateSteeringUI();
             UpdateThrottleUI();
             isUpdatingFromWebSocket = false;
+
+            BroadcastCurrentOutputsPreview();
         }
 
         private void UpdateLatestMessageLabel(string message)
@@ -912,6 +914,8 @@ namespace RCCarController
             throttleValue = Math.Clamp(throttle, 0, 180);
             UpdateSteeringUI();
             UpdateThrottleUI();
+
+            BroadcastCurrentOutputsPreview();
         }
 
         private void RefreshButton_Click(object? sender, RoutedEventArgs e)
@@ -1196,6 +1200,12 @@ namespace RCCarController
             return previous + Math.Sign(delta) * maxStep;
         }
 
+        private void BroadcastCurrentOutputsPreview()
+        {
+            var outputs = ComputeOutputs(applyDeltaLimit: true, updateDeltaState: false);
+            TryBroadcastControlEvent(outputs.steering, outputs.throttle);
+        }
+
         protected override void OnClosing(WindowClosingEventArgs e)
         {
             Disconnect();
@@ -1213,8 +1223,17 @@ namespace RCCarController
         private void TryBroadcastControlEvent(int steering180, int throttle180)
         {
             var rawSteeringValue = webSocketInputManager.LastRawSteering ?? MapToRange(steering180, 0, 180, 0, 65535);
-            var rawThrottleValue = webSocketInputManager.LastRawThrottle ?? MapToRange(throttle180, 0, 180, 0, 65535);
-            var rawBrakeValue = webSocketInputManager.LastRawBrake ?? 0;
+
+            var neutralOutput = ApplyPiecewiseMapping(throttleMappings, 90);
+            var minOutput = ApplyPiecewiseMapping(throttleMappings, 0);
+            var maxOutput = ApplyPiecewiseMapping(throttleMappings, 180);
+            var forwardSpan = Math.Max(1, Math.Abs(neutralOutput - minOutput));
+            var brakeSpan = Math.Max(1, Math.Abs(maxOutput - neutralOutput));
+
+            var rawThrottleValue = webSocketInputManager.LastRawThrottle
+                ?? MapToRange(Math.Max(0, neutralOutput - throttle180), 0, forwardSpan, 0, 65535);
+            var rawBrakeValue = webSocketInputManager.LastRawBrake
+                ?? MapToRange(Math.Max(0, throttle180 - neutralOutput), 0, brakeSpan, 0, 65535);
             var brake180 = MapToRange(rawBrakeValue, 0, 65535, 0, 180);
 
             if (lastBroadcastSteering == steering180 &&
