@@ -11,6 +11,16 @@ extern "C" {
 #include <cstdio>
 #include <strings.h>
 
+#ifndef FS_DEBUG_ESPNOW_GND
+#define FS_DEBUG_ESPNOW_GND 0
+#endif
+
+#if FS_DEBUG_ESPNOW_GND
+#define DEBUG_TRACE_LINE(value) Serial.println(value)
+#else
+#define DEBUG_TRACE_LINE(value) do {} while (0)
+#endif
+
 // ---------------- Serial <-> ESP-NOW Ground Bridge ----------------
 // Modular bridge that accepts Zigbee-style commands (SxxxTyyy) from
 // USB serial, relays them to the currently-selected ESP-NOW peer, and
@@ -144,9 +154,11 @@ private:
     EepromLayout layout;
     EEPROM.get(0, layout);
     if (layout.magic != EEPROM_MAGIC || layout.startIndex > layout.endIndex) {
+      // Default to 8 cars (0-7) if no valid persisted range
       startIndex = 0;
-      endIndex = 0;
+      endIndex = 15;
       activeIndex = 0;
+      persist();
       return;
     }
     startIndex = layout.startIndex;
@@ -187,22 +199,27 @@ public:
   void showActive(uint8_t index, uint8_t total, const MacAddress* mac) {
     if (!ready) return;
     display.clearDisplay();
-    display.setTextSize(1);
+
+    // Selected car index at top-left, 2x size, 0-based
+    display.setTextColor(SSD1306_WHITE);
+    display.setTextSize(2);
     display.setCursor(0, 0);
-    display.println(F("Active MAC"));
-    display.setCursor(0, 10);
-    if (mac != nullptr && total > 0) {
-      char macStr[18];
-      mac->toString(macStr, sizeof(macStr));
-      display.println(macStr);
-      display.setCursor(0, 22);
-      display.print(F("Index: "));
-      display.print(index + 1);
-      display.print(F("/"));
-      display.print(total);
-    } else {
-      display.println(F("(none)"));
-    }
+    display.print(index);
+
+    // Total cars count bottom-right at 1x size
+    display.setTextSize(1);
+    char totalBuf[24];
+    snprintf(totalBuf, sizeof(totalBuf), "Total cars: %u", static_cast<unsigned int>(total));
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(totalBuf, 0, 0, &x1, &y1, &w, &h);
+    int16_t xPos = static_cast<int16_t>(OLED_WIDTH - static_cast<int16_t>(w));
+    if (xPos < 0) xPos = 0;
+    int16_t yPos = static_cast<int16_t>(OLED_HEIGHT - static_cast<int16_t>(h));
+    if (yPos < 0) yPos = 0;
+    display.setCursor(xPos, yPos);
+    display.print(totalBuf);
+
     display.display();
   }
 
@@ -232,10 +249,12 @@ public:
   bool ensurePeer(const MacAddress* mac) {
     if (mac == nullptr) {
       peerReady = false;
+      DEBUG_TRACE_LINE("ensurePeer false 1");
       return false;
     }
 
     if (peerReady && memcmp(mac->bytes, currentTarget.bytes, sizeof(currentTarget.bytes)) == 0) {
+      DEBUG_TRACE_LINE("ensurePeer true");
       return true;
     }
 
@@ -243,13 +262,16 @@ public:
     if (esp_now_add_peer(const_cast<uint8_t*>(mac->bytes), ESP_NOW_ROLE_SLAVE, 1, nullptr, 0) == 0) {
       currentTarget = *mac;
       peerReady = true;
+      DEBUG_TRACE_LINE("ensurePeer peerReady");
     } else {
       peerReady = false;
+      DEBUG_TRACE_LINE("ensurePeer peerReady NOT");
     }
     return peerReady;
   }
 
   bool sendControl(int steering, int throttle) {
+    DEBUG_TRACE_LINE("S");
     if (!peerReady) {
       return false;
     }
@@ -425,6 +447,8 @@ private:
       Serial.print(start);
       Serial.print('-');
       Serial.println(end);
+    } else {
+      DEBUG_TRACE_LINE("? error setRange ?");
     }
   }
 
