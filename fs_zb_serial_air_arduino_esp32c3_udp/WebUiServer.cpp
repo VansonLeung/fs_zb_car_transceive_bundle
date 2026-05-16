@@ -54,11 +54,8 @@ void WebUiServer::tick() {
 }
 
 bool WebUiServer::ensureAuth() {
-  if (server.authenticate("admin", settings.security.adminPassword.c_str())) {
-    return true;
-  }
-  server.requestAuthentication(BASIC_AUTH, "fs-rc-air");
-  return false;
+  // Basic auth disabled
+  return true;
 }
 
 void WebUiServer::redirectTo(const char* path) {

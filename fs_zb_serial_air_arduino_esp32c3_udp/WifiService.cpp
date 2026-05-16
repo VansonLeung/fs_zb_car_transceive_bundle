@@ -24,6 +24,7 @@ void WifiService::apply(const WifiSettings& newSettings) {
   WiFi.mode(mode);
 
   if (!settings.staEnabled || settings.apAlwaysOn) {
+    // Allow empty AP password
     const char* password = settings.apPassword.c_str();
     if (settings.apPassword.isEmpty()) {
       WiFi.softAP(settings.apSsid.c_str());

@@ -138,9 +138,10 @@ void SettingsStore::normalize(AppSettings& settings) {
   if (settings.udp.testPort == 0) {
     settings.udp.testPort = DEFAULT_UDP_PORT;
   }
-  if (settings.security.adminPassword.isEmpty()) {
-    settings.security.adminPassword = DEFAULT_ADMIN_PASSWORD;
-  }
+  // Allow empty admin password
+  // if (settings.security.adminPassword.isEmpty()) {
+  //   settings.security.adminPassword = DEFAULT_ADMIN_PASSWORD;
+  // }
   if (settings.rtsp.url.isEmpty()) {
     settings.rtsp.url = DEFAULT_RTSP_URL;
   }
