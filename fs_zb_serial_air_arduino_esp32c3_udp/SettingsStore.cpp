@@ -37,6 +37,16 @@ AppSettings SettingsStore::load() {
   settings.browser.keyboardThrottleSpan = prefs.getInt("webKeyThrot", settings.browser.keyboardThrottleSpan);
   settings.browser.joystickSteeringSpan = prefs.getInt("webJoySteer", settings.browser.joystickSteeringSpan);
   settings.browser.joystickThrottleSpan = prefs.getInt("webJoyThrot", settings.browser.joystickThrottleSpan);
+  settings.browser.enableNeutralGear = prefs.getBool("webGearN", settings.browser.enableNeutralGear);
+  settings.browser.enableReverseGear = prefs.getBool("webGearR", settings.browser.enableReverseGear);
+  settings.browser.maxForwardGear = prefs.getUChar("webGearMax", settings.browser.maxForwardGear);
+  settings.browser.drive1Percent = prefs.getUChar("webD1Pct", settings.browser.drive1Percent);
+  settings.browser.drive2Percent = prefs.getUChar("webD2Pct", settings.browser.drive2Percent);
+  settings.browser.drive3Percent = prefs.getUChar("webD3Pct", settings.browser.drive3Percent);
+  settings.browser.drive4Percent = prefs.getUChar("webD4Pct", settings.browser.drive4Percent);
+  settings.browser.drive5Percent = prefs.getUChar("webD5Pct", settings.browser.drive5Percent);
+  settings.browser.drive6Percent = prefs.getUChar("webD6Pct", settings.browser.drive6Percent);
+  settings.browser.reversePercent = prefs.getUChar("webRevPct", settings.browser.reversePercent);
 
   prefs.end();
   normalize(settings);
@@ -80,6 +90,16 @@ void SettingsStore::save(AppSettings& settings) {
   prefs.putInt("webKeyThrot", settings.browser.keyboardThrottleSpan);
   prefs.putInt("webJoySteer", settings.browser.joystickSteeringSpan);
   prefs.putInt("webJoyThrot", settings.browser.joystickThrottleSpan);
+  prefs.putBool("webGearN", settings.browser.enableNeutralGear);
+  prefs.putBool("webGearR", settings.browser.enableReverseGear);
+  prefs.putUChar("webGearMax", settings.browser.maxForwardGear);
+  prefs.putUChar("webD1Pct", settings.browser.drive1Percent);
+  prefs.putUChar("webD2Pct", settings.browser.drive2Percent);
+  prefs.putUChar("webD3Pct", settings.browser.drive3Percent);
+  prefs.putUChar("webD4Pct", settings.browser.drive4Percent);
+  prefs.putUChar("webD5Pct", settings.browser.drive5Percent);
+  prefs.putUChar("webD6Pct", settings.browser.drive6Percent);
+  prefs.putUChar("webRevPct", settings.browser.reversePercent);
 
   prefs.end();
 }
@@ -147,4 +167,12 @@ void SettingsStore::normalize(AppSettings& settings) {
   settings.browser.keyboardThrottleSpan = constrain(settings.browser.keyboardThrottleSpan, 1, throttleSpanLimit);
   settings.browser.joystickSteeringSpan = constrain(settings.browser.joystickSteeringSpan, 1, steeringSpanLimit);
   settings.browser.joystickThrottleSpan = constrain(settings.browser.joystickThrottleSpan, 1, throttleSpanLimit);
+  settings.browser.maxForwardGear = static_cast<uint8_t>(constrain(static_cast<int>(settings.browser.maxForwardGear), 1, 6));
+  settings.browser.drive1Percent = static_cast<uint8_t>(constrain(static_cast<int>(settings.browser.drive1Percent), 0, 100));
+  settings.browser.drive2Percent = static_cast<uint8_t>(constrain(static_cast<int>(settings.browser.drive2Percent), 0, 100));
+  settings.browser.drive3Percent = static_cast<uint8_t>(constrain(static_cast<int>(settings.browser.drive3Percent), 0, 100));
+  settings.browser.drive4Percent = static_cast<uint8_t>(constrain(static_cast<int>(settings.browser.drive4Percent), 0, 100));
+  settings.browser.drive5Percent = static_cast<uint8_t>(constrain(static_cast<int>(settings.browser.drive5Percent), 0, 100));
+  settings.browser.drive6Percent = static_cast<uint8_t>(constrain(static_cast<int>(settings.browser.drive6Percent), 0, 100));
+  settings.browser.reversePercent = static_cast<uint8_t>(constrain(static_cast<int>(settings.browser.reversePercent), 0, 100));
 }
