@@ -1,0 +1,11 @@
+﻿<Solution>
+  <Project Path="FsZbGroundApp.Android/FsZbGroundApp.Android.csproj">
+    <Deploy />
+  </Project>
+  <Project Path="FsZbGroundApp.Browser/FsZbGroundApp.Browser.csproj" />
+  <Project Path="FsZbGroundApp.Desktop/FsZbGroundApp.Desktop.csproj" />
+  <Project Path="FsZbGroundApp.iOS/FsZbGroundApp.iOS.csproj">
+    <Deploy />
+  </Project>
+  <Project Path="FsZbGroundApp/FsZbGroundApp.csproj" />
+</Solution>

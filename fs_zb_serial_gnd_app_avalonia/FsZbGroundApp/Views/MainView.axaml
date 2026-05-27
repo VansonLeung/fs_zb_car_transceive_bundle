@@ -1,0 +1,286 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vlc="clr-namespace:LibVLCSharp.Avalonia;assembly=LibVLCSharp.Avalonia"
+             xmlns:vm="using:FsZbGroundApp.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="FsZbGroundApp.Views.MainView"
+             x:DataType="vm:MainViewModel">
+  <Design.DataContext>
+    <vm:MainViewModel />
+  </Design.DataContext>
+
+  <UserControl.Styles>
+    <Style Selector="UserControl">
+      <Setter Property="FontFamily" Value="Bahnschrift, Segoe UI" />
+      <Setter Property="Foreground" Value="#F2F6FF" />
+    </Style>
+
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="#33D1A4" />
+      <Setter Property="Foreground" Value="#09131A" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+
+    <Style Selector="Button.ghost">
+      <Setter Property="Background" Value="#2A4A5E" />
+      <Setter Property="Foreground" Value="#EFF5FF" />
+    </Style>
+
+    <Style Selector="ListBox#DriverLogList ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+  </UserControl.Styles>
+
+  <Border Padding="20">
+    <Border.Background>
+      <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#0A2B39" Offset="0" />
+        <GradientStop Color="#102130" Offset="0.5" />
+        <GradientStop Color="#1D1A26" Offset="1" />
+      </LinearGradientBrush>
+    </Border.Background>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Spacing="16">
+        <Border CornerRadius="16"
+                Padding="16"
+                Background="#332B3C4C"
+                BorderBrush="#5584D7FF"
+                BorderThickness="1">
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <StackPanel Spacing="4">
+              <TextBlock Text="Ground Control - OpenIPC FPV"
+                         FontSize="24"
+                         FontWeight="Bold" />
+              <TextBlock Text="Desktop and mobile responsive layout for WFB/OpenIPC ground operations."
+                         Opacity="0.84"
+                         TextWrapping="Wrap" />
+            </StackPanel>
+
+            <Border Grid.Column="1"
+                    Background="#2C1F2A35"
+                    Padding="10,6"
+                    CornerRadius="8"
+                    BorderBrush="#66BFE6FF"
+                    BorderThickness="1"
+                    VerticalAlignment="Center">
+              <TextBlock Text="{Binding StatusMessage}"
+                         MaxWidth="280"
+                         TextWrapping="Wrap" />
+            </Border>
+          </Grid>
+        </Border>
+
+        <Grid Name="LayoutGrid"
+              ColumnDefinitions="2*,420"
+              RowDefinitions="Auto"
+              ColumnSpacing="16">
+          <Border Grid.Column="0"
+                  CornerRadius="16"
+                  BorderThickness="1"
+                  BorderBrush="#557CE0C3"
+                  Background="#22101518"
+                  Padding="12"
+                  MinHeight="320">
+            <Grid RowDefinitions="*,Auto">
+              <vlc:VideoView MediaPlayer="{Binding MediaPlayer}"
+                             IsVisible="{Binding IsVlcPlaybackVisible}"
+                             HorizontalAlignment="Stretch"
+                             VerticalAlignment="Stretch" />
+
+              <Image Source="{Binding LowLatencyFrameImage}"
+                     IsVisible="{Binding IsLowLatencyPlaybackActive}"
+                     HorizontalAlignment="Stretch"
+                     VerticalAlignment="Stretch"
+                     Stretch="Uniform" />
+
+              <Border Grid.Row="1"
+                      Margin="0,10,0,0"
+                      CornerRadius="8"
+                      Padding="8"
+                      Background="#2A07131C">
+                <TextBlock Text="{Binding StreamUrl}"
+                           TextTrimming="CharacterEllipsis" />
+              </Border>
+            </Grid>
+          </Border>
+
+          <Border Name="ControlPanel"
+                  Grid.Column="1"
+                  CornerRadius="16"
+                  Padding="14"
+                  BorderThickness="1"
+                  BorderBrush="#5598E0FF"
+                  Background="#26131E29">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Control Panel"
+                         FontWeight="SemiBold"
+                         FontSize="18" />
+
+              <Border CornerRadius="10"
+                      Padding="10"
+                      Background="#2A12202B"
+                      BorderBrush="#335598E0"
+                      BorderThickness="1">
+                <StackPanel Spacing="8">
+                  <TextBlock Text="WFB Adapter (VID:PID)"
+                             FontWeight="SemiBold" />
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <ComboBox ItemsSource="{Binding AvailableSerialPorts}"
+                              SelectedItem="{Binding SelectedSerialPort, Mode=TwoWay}"
+                              PlaceholderText="Select WFB adapter">
+                      <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock Text="{Binding DisplayLabel}" />
+                        </DataTemplate>
+                      </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button Grid.Column="1"
+                            Content="Refresh"
+                            Command="{Binding RefreshSerialPortsCommand}" />
+                  </Grid>
+                  <TextBlock Text="{Binding SelectedSerialAddressText}"
+                             Opacity="0.82"
+                             TextWrapping="Wrap"
+                             MaxHeight="48" />
+                    <TextBlock Text="fpv4win-style flow: select adapter, then press START Session."
+                         Opacity="0.75"
+                         TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding WfbSerialStatus}"
+                             Opacity="0.85"
+                             TextWrapping="Wrap" />
+                </StackPanel>
+              </Border>
+
+              <Border CornerRadius="10"
+                      Padding="10"
+                      Background="#2A12202B"
+                      BorderBrush="#335598E0"
+                      BorderThickness="1">
+                <StackPanel Spacing="8">
+                  <TextBlock Text="Session Setup"
+                             FontWeight="SemiBold" />
+                  <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                    <ComboBox ItemsSource="{Binding ChannelOptions}"
+                              SelectedItem="{Binding SelectedChannel, Mode=TwoWay}"
+                              PlaceholderText="Channel" />
+                    <ComboBox Grid.Column="1"
+                              ItemsSource="{Binding ChannelWidthOptions}"
+                              SelectedItem="{Binding SelectedChannelWidth, Mode=TwoWay}"
+                              PlaceholderText="Width" />
+                    <ComboBox Grid.Column="2"
+                              ItemsSource="{Binding CodecOptions}"
+                              SelectedItem="{Binding SelectedCodec, Mode=TwoWay}"
+                              PlaceholderText="Codec" />
+                  </Grid>
+                  <TextBox Text="{Binding WfbKeyPath, Mode=TwoWay}"
+                           PlaceholderText="WFB key path (e.g. gs.key)" />
+                  <WrapPanel Orientation="Horizontal">
+                    <Button Classes="ghost"
+                            Content="Apply Channel"
+                            Command="{Binding ApplyChannelCommand}"
+                            Margin="0,0,8,0"
+                            MinWidth="130" />
+                    <Button Classes="primary"
+                          Content="{Binding WfbStartButtonText}"
+                            Command="{Binding StartWfbSessionCommand}"
+                            MinWidth="130" />
+                  </WrapPanel>
+                  <TextBlock Text="{Binding PacketCountersText, StringFormat='Packet (RTP/WFB/WiFi): {0}'}"
+                             Opacity="0.9" />
+                  <TextBlock Text="{Binding WfbSerialLastMessage, StringFormat='Last: {0}'}"
+                             MaxHeight="36"
+                             TextWrapping="Wrap"
+                             Opacity="0.75" />
+                </StackPanel>
+              </Border>
+
+              <Border CornerRadius="10"
+                      Padding="10"
+                      Background="#2A12202B"
+                      BorderBrush="#335598E0"
+                      BorderThickness="1"
+                      MinHeight="150"
+                      MaxHeight="240">
+                <StackPanel Spacing="8">
+                  <TextBlock Text="WiFi Driver Log"
+                             FontWeight="SemiBold" />
+                  <TextBlock Text="Click a log line to copy it."
+                             Opacity="0.72"
+                             FontSize="11" />
+                  <Border BorderThickness="1"
+                          BorderBrush="#334A6075"
+                          CornerRadius="6"
+                          Background="#1B0B1118"
+                          Padding="6"
+                          Height="180">
+                    <ListBox Name="DriverLogList"
+                             ItemsSource="{Binding DriverLogs}"
+                             SelectionChanged="OnDriverLogSelectionChanged"
+                             BorderThickness="0"
+                             Background="Transparent">
+                      <ListBox.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock Text="{Binding DisplayText}"
+                                     Foreground="{Binding LevelColor}"
+                                     TextWrapping="Wrap"
+                                     FontSize="11"
+                                     Margin="0" />
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+                  </Border>
+                </StackPanel>
+              </Border>
+
+              <Border CornerRadius="10"
+                      Padding="10"
+                      Background="#2A12202B"
+                      BorderBrush="#335598E0"
+                      BorderThickness="1">
+                <StackPanel Spacing="8">
+                  <TextBlock Text="Video Playback"
+                             FontWeight="SemiBold" />
+                  <TextBox Text="{Binding StreamUrl, Mode=TwoWay}"
+                           PlaceholderText="udp://@:52356 or rtsp://camera-ip:554/av0_0" />
+                  <WrapPanel Orientation="Horizontal">
+                    <Button Content="WFB RTP"
+                            Command="{Binding ApplyPresetCommand}"
+                            CommandParameter="udp://@:52356"
+                            Margin="0,0,8,0" />
+                    <Button Content="OpenIPC RTSP"
+                            Command="{Binding ApplyPresetCommand}"
+                            CommandParameter="rtsp://192.168.1.1:554/av0_0" />
+                  </WrapPanel>
+                  <ToggleSwitch IsChecked="{Binding UseRtspTcp, Mode=TwoWay}"
+                                Content="Prefer RTSP over TCP" />
+                  <TextBlock Text="{Binding NetworkCachingMs, StringFormat='Network Caching: {0} ms'}"
+                             Opacity="0.82" />
+                    <Slider Minimum="10"
+                          Maximum="2000"
+                          TickFrequency="20"
+                          IsSnapToTickEnabled="True"
+                          Value="{Binding NetworkCachingMs, Mode=TwoWay}" />
+                  <WrapPanel Orientation="Horizontal">
+                    <Button Classes="primary"
+                            Content="Play"
+                            Command="{Binding ConnectCommand}"
+                            Margin="0,0,8,0"
+                            MinWidth="110" />
+                    <Button Classes="ghost"
+                            Content="Stop"
+                            Command="{Binding DisconnectCommand}"
+                            MinWidth="110" />
+                  </WrapPanel>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </Border>
+        </Grid>
+      </StackPanel>
+    </ScrollViewer>
+  </Border>
+</UserControl>
